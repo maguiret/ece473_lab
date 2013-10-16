@@ -15,10 +15,10 @@
 #include <util/delay.h>
 
 //holds data to be sent to the segments. logic zero turns segment on
-uint8_t segment_data[5] 
+uint8_t segment_data[5];
 
 //decimal to 7-segment LED display encodings, logic "0" turns on segment
-uint8_t dec_to_7seg[12] 
+uint8_t dec_to_7seg[12];
 
 
 //******************************************************************************
@@ -31,6 +31,9 @@ uint8_t dec_to_7seg[12]
 //external loop delay times 12. 
 //
 uint8_t chk_buttons(uint8_t button) {
+
+	return 0;
+}
 //******************************************************************************
 
 //***********************************************************************************
@@ -46,22 +49,52 @@ void segsum(uint16_t sum) {
 }//segment_sum
 //***********************************************************************************
 
+//*******************************************************************************
+//                            debounce_switch                                  
+// Adapted from Ganssel's "Guide to Debouncing"            
+// Checks the state of pushbutton S0 It shifts in ones till the button is pushed. 
+// Function returns a 1 only once per debounced button push so a debounce and toggle 
+// function can be implemented at the same time.  Expects active low pushbutton on 
+// Port D bit zero.  Debounce time is determined by external loop delay times 12. 
+//*******************************************************************************
+int8_t debounce_switch(uint8_t pin, uint8_t button) {
+  static uint16_t state = 0; //holds present state
+  state = (state << 1) | (! bit_is_clear(PIND, 0)) | 0xE000;
+  if (state == 0xF000) return 1;
+  return 0;
+}
 
 //***********************************************************************************
-uint8_t main()
+int main()
 {
-//set port bits 4-7 B as outputs
-while(1){
-  //insert loop delay for debounce
-  //make PORTA an input port with pullups 
-  //enable tristate buffer for pushbutton switches
-  //now check each button and increment the count as needed
-  //bound the count to 0 - 1023
-  //break up the disp_value to 4, BCD digits in the array: call (segsum)
-  //bound a counter (0-4) to keep track of digit to display 
-  //make PORTA an output
-  //send 7 segment code to LED segments
-  //send PORTB the digit to display
-  //update digit to display
-  }//while
+	uint8_t ii;
+	
+	//set port bits 4-7 B as outputs
+	DDRA = 0xFF;
+	DDRB = 0xFF;
+
+	PORTA = 0xFF;
+	PORTB = 0xF0; //PWM low, 
+
+	while(1){
+		//insert loop delay for debounce
+		for (ii = 0; ii < 8; ii++) {
+			if (debounce_switch(PIND, ii)) {
+				PORTA = 0xFF & (0 << ii);
+				_delay_ms(2);
+			}
+		}
+
+
+		//make PORTA an input port with pullups 
+		//enable tristate buffer for pushbutton switches
+		//now check each button and increment the count as needed
+		//bound the count to 0 - 1023
+		//break up the disp_value to 4, BCD digits in the array: call (segsum)
+		//bound a counter (0-4) to keep track of digit to display 
+		//make PORTA an output
+		//send 7 segment code to LED segments
+		//send PORTB the digit to display
+		//update digit to display
+	}//while
 }//main
