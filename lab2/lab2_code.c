@@ -11,6 +11,7 @@
 #define F_CPU 16000000 // cpu speed in hertz 
 #define TRUE 1
 #define FALSE 0
+#define DELAY 2
 #include <avr/io.h>
 #include <util/delay.h>
 
@@ -57,35 +58,64 @@ void segsum(uint16_t sum) {
 // function can be implemented at the same time.  Expects active low pushbutton on 
 // Port D bit zero.  Debounce time is determined by external loop delay times 12. 
 //*******************************************************************************
-int8_t debounce_switch(uint8_t pin, uint8_t button) {
+int8_t debounce_switch() {
   static uint16_t state = 0; //holds present state
   state = (state << 1) | (! bit_is_clear(PIND, 0)) | 0xE000;
   if (state == 0xF000) return 1;
   return 0;
 }
 
+//uint8_t switch_process(uint8_t *cnt)
+//{
+//	uint8_t ret = (0xFF & ~(1 << *cnt));
+//	if (*cnt == 8)
+//		*cnt = 0;
+//	else
+//		*cnt++;
+//
+//	return ret;
+//}
+
+
 //***********************************************************************************
 int main()
 {
 	uint8_t ii;
+	uint8_t counter = 0;
 	
 	//set port bits 4-7 B as outputs
 	DDRA = 0xFF;
 	DDRB = 0xFF;
+	DDRD = 0x00;
 
 	PORTA = 0xFF;
-	PORTB = 0xF0; //PWM low, 
+	PORTB = 0x00; //PWM low, 
+	PORTD = 0xFF;
+
+	while (!debounce_switch());
 
 	while(1){
-		//insert loop delay for debounce
-		for (ii = 0; ii < 8; ii++) {
-			if (debounce_switch(PIND, ii)) {
-				PORTA = 0xFF & (0 << ii);
-				_delay_ms(2);
+		if (debounce_switch()) {
+			//counter = (counter < 8 ? counter++ : 0);
+			if (counter > 7) {
+				counter = 0;
+			} else {
+				counter++;
 			}
 		}
+		PORTA = 0xFF & ~(1 << counter);
 
-
+		PORTB = 0x00;
+		_delay_ms(DELAY);
+		PORTB = 0x10;
+		_delay_ms(DELAY);
+		PORTB = 0x20;
+		_delay_ms(DELAY);
+		PORTB = 0x30;
+		_delay_ms(DELAY);
+		PORTB = 0x40;
+		_delay_ms(DELAY);
+		//insert loop delay for debounce
 		//make PORTA an input port with pullups 
 		//enable tristate buffer for pushbutton switches
 		//now check each button and increment the count as needed
