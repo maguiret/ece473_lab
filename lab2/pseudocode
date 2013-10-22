@@ -4,6 +4,7 @@ while (1) {
 	DDRA = 0xFF; //output
 	PORTA = 0xFF;
 	display_digits();
+	PORTB |= 0b01110000;
 	DDRA = 0x00; //input
 	PORTA = 0xFF; //pullups
 	read_buttons();

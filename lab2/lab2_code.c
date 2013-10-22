@@ -1,26 +1,59 @@
-// lab2_skel.c 
-// R. Traylor
-// 9.12.08
+/*
+ * Created by: Jacob Branaugh
+ * Created on: 10/22/2013 14:30
+ *
+ * Code for ECE 473 Lab.
+ * 
+ ****************************HARDWARE SETUP*************************************
+ * - PORTA is connected to the segments of the LED display. and to the pushbuttons.
+ * - PORTA.0 corresponds to segment a, PORTA.1 corresponds to segement b, etc.
+ * - PORTB bits 4-6 go to a,b,c inputs of the 74HC138.
+ * - PORTB bit 7 goes to the PWM transistor base.
+ *******************************************************************************
+ *
+ ****************************LAB 2 SPECIFICS************************************
+ * - Pull PWM pin PORTB 7 low
+ * - LED segments are active low
+ * - Buttons are active low
+ * - EN_N tied low, EN tied high on LED board
+ * - COM_EN on button board tied to DEC7 on LED board
+ *   - Tristate in HI-Z when DEC7 high (PORTB |= 0b01110000)
+ * - COM_LVL on button board tied low
+ *******************************************************************************
+ */
 
-//  HARDWARE SETUP:
-//  PORTA is connected to the segments of the LED display. and to the pushbuttons.
-//  PORTA.0 corresponds to segment a, PORTA.1 corresponds to segement b, etc.
-//  PORTB bits 4-6 go to a,b,c inputs of the 74HC138.
-//  PORTB bit 7 goes to the PWM transistor base.
+#include <avr/io.h>
+#include <util/delay.h>
 
 #define F_CPU 16000000 // cpu speed in hertz 
 #define TRUE 1
 #define FALSE 0
 #define DELAY 2
-#include <avr/io.h>
-#include <util/delay.h>
 
-//holds data to be sent to the segments. logic zero turns segment on
-uint8_t segment_data[5];
+#define CENTER_COLON 4
+#define HI_Z 5
 
-//decimal to 7-segment LED display encodings, logic "0" turns on segment
-uint8_t dec_to_7seg[12];
+uint8_t 7seg_digits[10] = {
+	0b00111111, //0
+	0b00000110, //1
+	0b01011011, //2
+	0b01001111, //3
+	0b01100110, //4
+	0b01101101, //5
+	0b01111100, //6
+	0b00000111, //7
+	0b01111111, //8
+	0b01100111  //9
+};
 
+uint8_t decoder_select[6] = {
+	0b00000000, //right most digit
+	0b00100000,
+	0b00110000,
+	0b01000000, //left most digit
+	0b00010000, //center colon
+	0b01110000  //hi-Z mode
+}
 
 //******************************************************************************
 //                            chk_buttons                                      
@@ -94,16 +127,19 @@ int main()
 
 	while (!debounce_switch());
 
-	while(1){
+	while (1) {
 		if (debounce_switch()) {
 			//counter = (counter < 8 ? counter++ : 0);
-			if (counter > 7) {
+			if (counter > 8) {
 				counter = 0;
 			} else {
 				counter++;
 			}
 		}
-		PORTA = 0xFF & ~(1 << counter);
+		if (counter == 8)
+			PORTA = 0x00;
+		else
+			PORTA = 0xFF & ~(1 << counter);
 
 		PORTB = 0x00;
 		_delay_ms(DELAY);
