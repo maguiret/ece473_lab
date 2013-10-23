@@ -4,14 +4,14 @@
  *
  * Code for ECE 473 Lab.
  * 
- ****************************HARDWARE SETUP*************************************
+ ****************************HARDWARE SETUP***********************************************
  * - PORTA is connected to the segments of the LED display. and to the pushbuttons.
  * - PORTA.0 corresponds to segment a, PORTA.1 corresponds to segement b, etc.
  * - PORTB bits 4-6 go to a,b,c inputs of the 74HC138.
  * - PORTB bit 7 goes to the PWM transistor base.
- *******************************************************************************
+ *****************************************************************************************
  *
- ****************************LAB 2 SPECIFICS************************************
+ ****************************LAB 2 SPECIFICS**********************************************
  * - Pull PWM pin PORTB 7 low
  * - LED segments are active low
  * - Buttons are active low
@@ -19,7 +19,7 @@
  * - COM_EN on button board tied to DEC7 on LED board
  *   - Tristate in HI-Z when DEC7 high (PORTB |= 0b01110000)
  * - COM_LVL on button board tied low
- *******************************************************************************
+ *****************************************************************************************
  */
 
 #include <avr/io.h>
@@ -28,60 +28,33 @@
 #define F_CPU 16000000 // cpu speed in hertz 
 #define TRUE 1
 #define FALSE 0
-#define DELAY 2
+#define DELAY 5
 
 #define CENTER_COLON 4
-#define HI_Z 5
+#define HI_Z 1
+#define CLEAR_DECODER_BITS 0b10001111
 
-uint8_t 7seg_digits[10] = {
-	0b00111111, //0
-	0b00000110, //1
-	0b01011011, //2
-	0b01001111, //3
-	0b01100110, //4
-	0b01101101, //5
-	0b01111100, //6
-	0b00000111, //7
-	0b01111111, //8
-	0b01100111  //9
+uint8_t sev_seg_digits[10] = {
+	0b11000000, //0 (active low)
+	0b11111001, //1 (active low)
+	0b10100100, //2 (active low)
+	0b10110000, //3 (active low)
+	0b10011001, //4 (active low)
+	0b10010010, //5 (active low)
+	0b10000011, //6 (active low)
+	0b11111000, //7 (active low)
+	0b10000000, //8 (active low)
+	0b10011000  //9 (active low)
 };
 
 uint8_t decoder_select[6] = {
 	0b00000000, //right most digit
-	0b00100000,
+	0b00010000,
 	0b00110000,
 	0b01000000, //left most digit
 	0b00010000, //center colon
 	0b01110000  //hi-Z mode
-}
-
-//******************************************************************************
-//                            chk_buttons                                      
-//Checks the state of the button number passed to it. It shifts in ones till   
-//the button is pushed. Function returns a 1 only once per debounced button    
-//push so a debounce and toggle function can be implemented at the same time.  
-//Adapted to check all buttons from Ganssel's "Guide to Debouncing"            
-//Expects active low pushbuttons on PINA port.  Debounce time is determined by 
-//external loop delay times 12. 
-//
-uint8_t chk_buttons(uint8_t button) {
-
-	return 0;
-}
-//******************************************************************************
-
-//***********************************************************************************
-//                                   segment_sum                                    
-//takes a 16-bit binary input value and places the appropriate equivalent 4 digit 
-//BCD segment code in the array segment_data for display.                       
-//array is loaded at exit as:  |digit3|digit2|colon|digit1|digit0|
-void segsum(uint16_t sum) {
-  //determine how many digits there are 
-  //break up decimal sum into 4 digit-segments
-  //blank out leading zero digits 
-  //now move data to right place for misplaced colon position
-}//segment_sum
-//***********************************************************************************
+};
 
 //*******************************************************************************
 //                            debounce_switch                                  
@@ -91,66 +64,123 @@ void segsum(uint16_t sum) {
 // function can be implemented at the same time.  Expects active low pushbutton on 
 // Port D bit zero.  Debounce time is determined by external loop delay times 12. 
 //*******************************************************************************
-int8_t debounce_switch() {
+int8_t debounce_switch_a(uint8_t button) {
   static uint16_t state = 0; //holds present state
-  state = (state << 1) | (! bit_is_clear(PIND, 0)) | 0xE000;
+  state = (state << 1) | (! bit_is_clear(PINA, button)) | 0xE000;
   if (state == 0xF000) return 1;
   return 0;
 }
 
-//uint8_t switch_process(uint8_t *cnt)
-//{
-//	uint8_t ret = (0xFF & ~(1 << *cnt));
-//	if (*cnt == 8)
-//		*cnt = 0;
-//	else
-//		*cnt++;
-//
-//	return ret;
-//}
+int8_t debounce_switch_d(uint8_t button) {
+  static uint16_t state = 0; //holds present state
+  state = (state << 1) | (! bit_is_clear(PIND, button)) | 0xE000;
+  if (state == 0xF000) return 1;
+  return 0;
+}
 
+/*****************************************************************************************
+ * Function:		display_digits
+ * Description:		Function takes a 16 bit (4 digit base 10) number and displays each
+ * 			number on the appropriate digit. 
+ * Arguments:		num - 16 bit input number
+ * Return:		None
+ *****************************************************************************************
+ */
+void display_digits(uint16_t num) 
+{
+	uint16_t tmp = num;
+	uint8_t cur_value;
+	uint8_t cur_digit = 0;
+	//uint8_t num_digits = 0;
 
-//***********************************************************************************
-int main()
+	do {
+		cur_value = tmp % 10; //get current digit to display
+		PORTB &= CLEAR_DECODER_BITS; //clear portb decoder bits
+		PORTB |= decoder_select[cur_digit]; //set portb decoder bits
+		PORTA = 0xFF;
+		PORTA = sev_seg_digits[cur_value]; //display digit
+		_delay_ms(DELAY);
+		cur_digit++; //next digit
+		tmp /= 10; //get next value
+	} while (tmp >= 1);
+}
+
+/*****************************************************************************************
+ * Function:		read_buttons
+ * Description:		Function takes the address of the current 16 bit number in the 
+ * 			count, reads the pushbuttons connected to PORTA, and increments
+ * 			the number appropriately.
+ * Arguments:		*num - pointer to 16 bit integer
+ * Return:		None (modified num by reference)
+ *****************************************************************************************
+ */
+void read_buttons(uint16_t *num)
 {
 	uint8_t ii;
-	uint8_t counter = 0;
-	
-	//set port bits 4-7 B as outputs
-	DDRA = 0xFF;
-	DDRB = 0xFF;
-	DDRD = 0x00;
+	for (ii = 0; ii < 8; ii++) 
+		if (debounce_switch_a(ii))
+			*num += (1 << ii);
+}
 
-	PORTA = 0xFF;
-	PORTB = 0x00; //PWM low, 
+/*****************************************************************************************
+ ********************************* MAIN FUNCTION *****************************************
+ *****************************************************************************************
+ */
+int main()
+{
+	uint16_t number = 0;
+	
+	/* Initialization */
+	DDRA = 0xFF; //outputs
+	DDRB = 0xFF; //outputs
+	PORTA = 0xFF; //pullups
+	PORTB = 0x70; //PWM low, tristate in hi-z
+	DDRD = 0xFF;
 	PORTD = 0xFF;
 
-	while (!debounce_switch());
-
 	while (1) {
-		if (debounce_switch()) {
-			//counter = (counter < 8 ? counter++ : 0);
-			if (counter > 8) {
-				counter = 0;
-			} else {
-				counter++;
-			}
-		}
-		if (counter == 8)
-			PORTA = 0x00;
-		else
-			PORTA = 0xFF & ~(1 << counter);
 
-		PORTB = 0x00;
-		_delay_ms(DELAY);
-		PORTB = 0x10;
-		_delay_ms(DELAY);
-		PORTB = 0x20;
-		_delay_ms(DELAY);
-		PORTB = 0x30;
-		_delay_ms(DELAY);
-		PORTB = 0x40;
-		_delay_ms(DELAY);
+		//DISPLAY
+		DDRA = 0xFF; //output
+		PORTA = 0xFF; //pullups
+		display_digits(number);
+
+		//READ
+		////PORTB |= 0b01110000; //activate hi-z
+		////DDRA = 0x00; //inputs
+		////PORTA = 0xFF; //pullups
+		////read_buttons(&number);
+
+		if (debounce_switch_d(0))
+			number++;
+
+		if (number > 1023)
+			number = 1;
+		//END
+		
+		//if (debounce_switch()) {
+		//	//counter = (counter < 8 ? counter++ : 0);
+		//	if (counter > 8) {
+		//		counter = 0;
+		//	} else {
+		//		counter++;
+		//	}
+		//}
+		//if (counter == 8)
+		//	PORTA = 0x00;
+		//else
+		//	PORTA = 0xFF & ~(1 << counter);
+
+		//PORTB = 0x00;
+		//_delay_ms(DELAY);
+		//PORTB = 0x10;
+		//_delay_ms(DELAY);
+		//PORTB = 0x20;
+		//_delay_ms(DELAY);
+		//PORTB = 0x30;
+		//_delay_ms(DELAY);
+		//PORTB = 0x40;
+		//_delay_ms(DELAY);
 		//insert loop delay for debounce
 		//make PORTA an input port with pullups 
 		//enable tristate buffer for pushbutton switches
