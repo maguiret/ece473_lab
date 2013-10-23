@@ -116,10 +116,30 @@ void display_digits(uint16_t num)
  */
 void read_buttons(uint16_t *num)
 {
-	uint8_t ii;
-	for (ii = 0; ii < 8; ii++) 
-		if (debounce_switch_a(ii))
-			*num += (1 << ii);
+	//uint8_t ii;
+	//for (ii = 0; ii < 8; ii++) {
+	//	if (debounce_switch_a(ii))
+	//		*num += (1 << ii);
+	//}
+	//if (debounce_switch_a(0))
+	//	*num += 1;
+	if (debounce_switch_a(0))
+		*num += 1;
+	if (debounce_switch_a(1))
+		*num += 2;
+	if (debounce_switch_a(2))
+		*num += 4;
+	if (debounce_switch_a(3))
+		*num += 8;
+	if (debounce_switch_a(4))
+		*num += 16;
+	if (debounce_switch_a(5))
+		*num += 32;
+	if (debounce_switch_a(6))
+		*num += 64;
+	if (debounce_switch_a(7))
+		*num += 128;
+
 }
 
 /*****************************************************************************************
@@ -135,8 +155,8 @@ int main()
 	DDRB = 0xFF; //outputs
 	PORTA = 0xFF; //pullups
 	PORTB = 0x70; //PWM low, tristate in hi-z
-	DDRD = 0xFF;
-	PORTD = 0xFF;
+	//DDRD = 0x00;
+	//PORTD = 0xFF;
 
 	while (1) {
 
@@ -146,13 +166,10 @@ int main()
 		display_digits(number);
 
 		//READ
-		////PORTB |= 0b01110000; //activate hi-z
-		////DDRA = 0x00; //inputs
-		////PORTA = 0xFF; //pullups
-		////read_buttons(&number);
-
-		if (debounce_switch_d(0))
-			number++;
+		PORTB |= 0b01110000; //activate hi-z
+		DDRA = 0x00; //inputs
+		PORTA = 0xFF; //pullups
+		read_buttons(&number);
 
 		if (number > 1023)
 			number = 1;
