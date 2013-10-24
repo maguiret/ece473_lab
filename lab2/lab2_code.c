@@ -28,11 +28,13 @@
 #define F_CPU 16000000 // cpu speed in hertz 
 #define TRUE 1
 #define FALSE 0
-#define DELAY 5
+#define DELAY 10
 
 #define CENTER_COLON 4
 #define HI_Z 1
 #define CLEAR_DECODER_BITS 0b10001111
+
+volatile uint16_t number;
 
 uint8_t sev_seg_digits[10] = {
 	0b11000000, //0 (active low)
@@ -56,6 +58,9 @@ uint8_t decoder_select[6] = {
 	0b01110000  //hi-Z mode
 };
 
+//holds debounce states for each button
+uint16_t state[8] = {0,0,0,0,0,0,0,0,0};
+
 //*******************************************************************************
 //                            debounce_switch                                  
 // Adapted from Ganssel's "Guide to Debouncing"            
@@ -65,9 +70,9 @@ uint8_t decoder_select[6] = {
 // Port D bit zero.  Debounce time is determined by external loop delay times 12. 
 //*******************************************************************************
 int8_t debounce_switch_a(uint8_t button) {
-  static uint16_t state = 0; //holds present state
-  state = (state << 1) | (! bit_is_clear(PINA, button)) | 0xE000;
-  if (state == 0xF000) return 1;
+  //static uint16_t state = 0; //holds present state
+  state[button] = (state[button] << 1) | (! bit_is_clear(PINA, button)) | 0xE000;
+  if (state[button] == 0xF000) return 1;
   return 0;
 }
 
@@ -86,9 +91,9 @@ int8_t debounce_switch_d(uint8_t button) {
  * Return:		None
  *****************************************************************************************
  */
-void display_digits(uint16_t num) 
+void display_digits() 
 {
-	uint16_t tmp = num;
+	uint16_t tmp = number;
 	uint8_t cur_value;
 	uint8_t cur_digit = 0;
 	//uint8_t num_digits = 0;
@@ -114,31 +119,41 @@ void display_digits(uint16_t num)
  * Return:		None (modified num by reference)
  *****************************************************************************************
  */
-void read_buttons(uint16_t *num)
+void read_buttons(uint8_t button)
 {
-	//uint8_t ii;
+	uint8_t ii;
+	PORTB = 0b01110000; //activate hi-z
+	DDRA = 0x00; //inputs
+	PORTA = 0xFF; //pullups
+
 	//for (ii = 0; ii < 8; ii++) {
-	//	if (debounce_switch_a(ii))
-	//		*num += (1 << ii);
+	//	//if (debounce_switch_a(ii))
+	//	if (debounce_switch_d(ii))
+	//		number += (1 << ii);
 	//}
+	if (debounce_switch_a(button))
+		number += (1 << button);
+	
+
+
 	//if (debounce_switch_a(0))
 	//	*num += 1;
-	if (debounce_switch_a(0))
-		*num += 1;
-	if (debounce_switch_a(1))
-		*num += 2;
-	if (debounce_switch_a(2))
-		*num += 4;
-	if (debounce_switch_a(3))
-		*num += 8;
-	if (debounce_switch_a(4))
-		*num += 16;
-	if (debounce_switch_a(5))
-		*num += 32;
-	if (debounce_switch_a(6))
-		*num += 64;
-	if (debounce_switch_a(7))
-		*num += 128;
+	//if (debounce_switch_a(0))
+	//	*num += 1;
+	//if (debounce_switch_a(1))
+	//	*num += 2;
+	//if (debounce_switch_a(2))
+	//	*num += 4;
+	//if (debounce_switch_a(3))
+	//	*num += 8;
+	//if (debounce_switch_a(4))
+	//	*num += 16;
+	//if (debounce_switch_a(5))
+	//	*num += 32;
+	//if (debounce_switch_a(6))
+	//	*num += 64;
+	//if (debounce_switch_a(7))
+	//	*num += 128;
 
 }
 
@@ -148,28 +163,30 @@ void read_buttons(uint16_t *num)
  */
 int main()
 {
-	uint16_t number = 0;
+	uint8_t ii;
+	number = 0;
 	
 	/* Initialization */
 	DDRA = 0xFF; //outputs
-	DDRB = 0xFF; //outputs
+	DDRB = 0xF0; //outputs on high nibble
 	PORTA = 0xFF; //pullups
 	PORTB = 0x70; //PWM low, tristate in hi-z
-	//DDRD = 0x00;
-	//PORTD = 0xFF;
+	DDRD = 0x00;
+	PORTD = 0xFF;
 
 	while (1) {
 
 		//DISPLAY
 		DDRA = 0xFF; //output
 		PORTA = 0xFF; //pullups
-		display_digits(number);
+		display_digits();
+		PORTB = 0x60; //switch encoder output to unused bit to remove ghosting
 
 		//READ
-		PORTB |= 0b01110000; //activate hi-z
-		DDRA = 0x00; //inputs
-		PORTA = 0xFF; //pullups
-		read_buttons(&number);
+		for (ii = 0; ii < 8; ii++) {
+			read_buttons(ii);
+		}
+		//read_buttons(0);
 
 		if (number > 1023)
 			number = 1;
