@@ -168,6 +168,6 @@ int main()
 
 		//Reset number if need be
 		if (number > COUNT_MAX)
-			number = 1;
+			number -= COUNT_MAX;
 	}
 }
