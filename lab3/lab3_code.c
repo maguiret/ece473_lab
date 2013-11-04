@@ -9,6 +9,10 @@
  * - PORTA.0 corresponds to segment a, PORTA.1 corresponds to segement b, etc.
  * - PORTB bits 4-6 go to a,b,c inputs of the 74HC138.
  * - PORTB bit 7 goes to the PWM transistor base.
+ * - PORTB bit 0 goes to shift load on the bar graph display
+ * - PORTB bit 1 goes to the clock inputs of the bar graph and encoder boards
+ * - PORTB bit 2 goes to the serial in of the bar graph display
+ * - PORTB bit 3 goes to the serial out of the encoder board
  *****************************************************************************************
  *
  ****************************LAB 2 SPECIFICS**********************************************
@@ -30,7 +34,7 @@
 #include <util/delay.h>
 
 #define F_CPU 16000000 // cpu speed in hertz 
-#define DELAY_2_CLK do{asm("nop");asm("nop");}while(0)
+#define DELAY_CLK do{asm("nop");asm("nop");}while(0)
 #define COUNT_MAX 1023
 
 #define CLEAR_DECODER_BITS(n) ((n) &= 0x8F)
@@ -65,6 +69,19 @@ uint8_t decoder_select[6] = {
 
 /* Holds debounce states for each button */
 uint16_t state[8] = {0,0,0,0,0,0,0,0,0};
+
+
+/*****************************************************************************************
+ * Function:		TCNT0_init
+ * Description:		Initializes timer/counter 0
+ * Arguments:		None
+ * Return:		None
+ *****************************************************************************************
+ */
+void TCNT0_init() {
+	TIMSK |= (1<<TOIE0); //enable timer/counter0 overflow interrupt
+	TCCR0 |= (1<<CS01); //normal mode, prescale by 128
+}
 
 /*****************************************************************************************
  * Function:		debounce_switch_X
@@ -116,7 +133,6 @@ void display_digits()
 		_delay_loop_1(200); //delay for about arg*3 cycles
 		if (tmp >= 1) {
 			tmp /= 10; //get next value
-			PORTB = 0x60; //switch encoder to unused bit to remove ghosting
 		}
 	}
 
@@ -131,15 +147,29 @@ void display_digits()
  * Return:		None
  *****************************************************************************************
  */
-void read_buttons(uint8_t button)
+void read_buttons()
 {
-	PORTB = 0b01110000; //activate hi-z
+	/* Save state of registers */
+	uint8_t old_PORTB = PORTB;
+	uint8_t old_PORTA = PORTA;
+	uint8_t old_DDRA = DDRA;
+
+	uint8_t button;
+
+	PORTB |= 0x70; //activate hi-z, leave everything else
 	PORTA = 0xFF; //pullups
 	DDRA = 0x00; //inputs
-	DELAY_2_CLK; //delay 2 clock cycles
+	DELAY_CLK; 
 
-	if (debounce_switch_a(button))
-		number += (1 << button);
+	/* check buttons with switch debouncing */
+	for (button = 0; button < 8; button++)
+		if (debounce_switch_a(button))
+			number += (1 << button);
+
+	/* Restore state of registers */
+	PORTB = old_PORTB;
+	PORTA = old_PORTA;
+	DDRA = old_DDRA;
 }
 
 /*****************************************************************************************
@@ -148,23 +178,18 @@ void read_buttons(uint8_t button)
  */
 int main()
 {
-	uint8_t ii; //loop counter
 	number = 0; //initialize number
 	
 	/* Initialization */
 	DDRA = 0xFF; //outputs
 	DDRB = 0xF0; //outputs on high nibble
-	PORTA = 0xFF; //pullups
-	PORTB = 0x70; //PWM low, tristate in hi-z
+
+	/* enable interrupts */
+	sei();
 
 	while (1) {
 
 		display_digits();
-
-		//Read all 8 buttons
-		for (ii = 0; ii < 8; ii++) 
-			read_buttons(ii);
-		
 
 		//Reset number if need be
 		if (number > COUNT_MAX)
