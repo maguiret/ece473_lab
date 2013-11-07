@@ -169,14 +169,25 @@ void display_digits()
 	 * encoded digit to 7-seg, divides by 10 to get next digit. Loops until cur_value
 	 * is less than 1. */
 	for (cur_digit = 0; cur_digit < 4; cur_digit++) {
+
+		PORTB &= 0x8F; //zeroes digit select bits of PORTB
+		PORTA = 0xFF; //clear PORTA
+		PORTB |= decoder_select[cur_digit]; //set portb decoder bits
+
+		/* Display when number is 0 */
+		if (tmp < 1 && cur_digit == 0) {
+			PORTA = sev_seg_digits[0]; //display digit
+		}
+
+		/* Display current digit */
 		if (tmp >= 1) {
 			cur_value = tmp % 10; //get current digit to display
-			PORTB &= 0x8F; //zeroes digit select bits of PORTB
-			PORTA = 0xFF; //clear PORTA
-			PORTB |= decoder_select[cur_digit]; //set portb decoder bits
 			PORTA = sev_seg_digits[cur_value]; //display digit
 		}
+
 		_delay_loop_1(200); //delay for about arg*3 cycles
+
+		/* Get next digit if possible */
 		if (tmp >= 1) {
 			tmp /= 10; //get next value
 		}
@@ -305,16 +316,13 @@ ISR(TIMER0_OVF_vect)
 	if (check_1 == 1 || check_2 == 1)
 		number -= step_size;
 
-	/* Reset number if need be */
-	if (number > COUNT_MAX)
-		number = 0;
-	if (number < 0)
-		number = COUNT_MAX;
+	/* Ensure number is always between 0 and COUNT_MAX */
+	number %= COUNT_MAX + 1;
 	
 	/* Restore state of registers */
-	DDRA = old_DDRA;
-	PORTA = old_PORTA;
 	PORTB = old_PORTB;
+	PORTA = old_PORTA;
+	DDRA = old_DDRA;
 }
 
 /*****************************************************************************************
