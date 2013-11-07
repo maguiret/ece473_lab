@@ -96,7 +96,7 @@ volatile uint16_t state[8] = {0,0,0,0,0,0,0,0};
 void TCNT0_init() 
 {
 	TIMSK |= (1<<TOIE0); //enable timer/counter0 overflow interrupt
-	TCCR0 |= (1<<CS01); //normal mode, prescale by 128
+	TCCR0 |= (1<<CS01); //normal mode, prescale by 8
 }
 
 /*****************************************************************************************
@@ -161,8 +161,9 @@ void display_digits()
 	uint8_t cur_digit = 0; //current digit to display on
 
 	//Set Register A
-	DDRA = 0xFF; //output
 	PORTA = 0xFF; //pullups
+	DDRA = 0xFF; //output
+	DELAY_CLK;
 
 
 	/* Loop displays each base 10 digit one by one. Mods by 10 to get digit, displays
@@ -170,8 +171,9 @@ void display_digits()
 	 * is less than 1. */
 	for (cur_digit = 0; cur_digit < 4; cur_digit++) {
 
-		PORTB &= 0x8F; //zeroes digit select bits of PORTB
 		PORTA = 0xFF; //clear PORTA
+		DELAY_CLK;
+		PORTB &= 0x8F; //clear decoder bits
 		PORTB |= decoder_select[cur_digit]; //set portb decoder bits
 
 		/* Display when number is 0 */
@@ -208,6 +210,7 @@ void read_buttons()
 	uint8_t button;
 
 	PORTB |= 0x70; //activate hi-z, leave everything else
+	DELAY_CLK; //asdfasdf
 	PORTA = 0xFF; //pullups
 	DDRA = 0x00; //inputs
 	DELAY_CLK; //let everything settle
@@ -236,7 +239,7 @@ uint8_t read_encoder(uint8_t encoder)
 		if (encoder_cur_a == 1 && encoder_cur_b == 1) { //if encoder turned
 			if (encoder1_prev_a == 1 && encoder1_prev_b == 0) //clockwise
 				ret = 0;
-			if (encoder1_prev_a == 0 && encoder1_prev_b == 1) //counter
+			else if (encoder1_prev_a == 0 && encoder1_prev_b == 1) //counter
 				ret = 1;
 		}
 		/* Stores values for later */
@@ -248,7 +251,7 @@ uint8_t read_encoder(uint8_t encoder)
 		if (encoder_cur_a == 1 && encoder_cur_b == 1) { //if encoder turned
 			if (encoder2_prev_a == 1 && encoder2_prev_b == 0) //clockwise
 				ret = 0;
-			if (encoder2_prev_a == 0 && encoder2_prev_b == 1) //counter
+			else if (encoder2_prev_a == 0 && encoder2_prev_b == 1) //counter
 				ret = 1;
 		}
 		/* Stores values for later */
@@ -271,12 +274,8 @@ uint8_t read_encoder(uint8_t encoder)
  ****************************************************************************************/
 ISR(TIMER0_OVF_vect)
 {
-	/* Save state of registers */
-	uint8_t old_DDRA = DDRA;
-	uint8_t old_PORTA = PORTA;
-	uint8_t old_PORTB = PORTB;
-
 	read_buttons();
+	DELAY_CLK;
 
 	/* Sets the counter step size based on button mode
 	 * steps by 1 (default) if neither pressed
@@ -295,9 +294,9 @@ ISR(TIMER0_OVF_vect)
 	/* Sets leds on bar graph display */
 	SPDR = pushbutton_mode; //sets value of SPI data register to mode value
 	while(bit_is_clear(SPSR, SPIF)); //waits for serial transmission to complete
-	PORTB &= 0x0F;
+	PORTB &= 0x8F;
 	PORTB |= 0x60; //toggle bar graph regclk
-	PORTB &= 0x0F;
+	PORTB &= 0x8F;
 
 	/* Check both encoders for rotation */
 	PORTB |= 0x01; //toggle shift load on encoder board
@@ -319,10 +318,7 @@ ISR(TIMER0_OVF_vect)
 	/* Ensure number is always between 0 and COUNT_MAX */
 	number %= COUNT_MAX + 1;
 	
-	/* Restore state of registers */
-	PORTB = old_PORTB;
-	PORTA = old_PORTA;
-	DDRA = old_DDRA;
+	display_digits();
 }
 
 /*****************************************************************************************
@@ -342,6 +338,5 @@ int main()
 	/* enable interrupts */
 	sei();
 
-	while (1) 
-		display_digits();
+	while (1);
 }
