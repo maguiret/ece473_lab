@@ -165,7 +165,6 @@ void display_digits()
 	DDRA = 0xFF; //output
 	DELAY_CLK;
 
-
 	/* Loop displays each base 10 digit one by one. Mods by 10 to get digit, displays
 	 * encoded digit to 7-seg, divides by 10 to get next digit. Loops until cur_value
 	 * is less than 1. */
@@ -195,6 +194,10 @@ void display_digits()
 		}
 	}
 
+	PORTB |= 0x70;
+	PORTA = 0xFF;
+	DDRA = 0x00;
+	DELAY_CLK; //let everything settle
 }
 
 /*****************************************************************************************
@@ -210,7 +213,6 @@ void read_buttons()
 	uint8_t button;
 
 	PORTB |= 0x70; //activate hi-z, leave everything else
-	DELAY_CLK; //asdfasdf
 	PORTA = 0xFF; //pullups
 	DDRA = 0x00; //inputs
 	DELAY_CLK; //let everything settle
@@ -275,7 +277,6 @@ uint8_t read_encoder(uint8_t encoder)
 ISR(TIMER0_OVF_vect)
 {
 	read_buttons();
-	DELAY_CLK;
 
 	/* Sets the counter step size based on button mode
 	 * steps by 1 (default) if neither pressed
@@ -294,9 +295,12 @@ ISR(TIMER0_OVF_vect)
 	/* Sets leds on bar graph display */
 	SPDR = pushbutton_mode; //sets value of SPI data register to mode value
 	while(bit_is_clear(SPSR, SPIF)); //waits for serial transmission to complete
-	PORTB &= 0x8F;
-	PORTB |= 0x60; //toggle bar graph regclk
-	PORTB &= 0x8F;
+	//PORTB &= 0x8F;
+	//PORTB |= 0x60; //toggle bar graph regclk
+	//PORTB &= 0x8F;
+	PORTB |= 0x70;
+	PORTB &= 0xEF; //toggle bar graph regclk
+	PORTB |= 0x10;
 
 	/* Check both encoders for rotation */
 	PORTB |= 0x01; //toggle shift load on encoder board
