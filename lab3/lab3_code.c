@@ -295,9 +295,6 @@ ISR(TIMER0_OVF_vect)
 	/* Sets leds on bar graph display */
 	SPDR = pushbutton_mode; //sets value of SPI data register to mode value
 	while(bit_is_clear(SPSR, SPIF)); //waits for serial transmission to complete
-	//PORTB &= 0x8F;
-	//PORTB |= 0x60; //toggle bar graph regclk
-	//PORTB &= 0x8F;
 	PORTB |= 0x70;
 	PORTB &= 0xEF; //toggle bar graph regclk
 	PORTB |= 0x10;
