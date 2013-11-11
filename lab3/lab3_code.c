@@ -212,6 +212,10 @@ void read_buttons()
 {
 	uint8_t button;
 
+	PORTB &= 0x8F;
+	PORTB |= 0x50; //set decoder to output 5 to turn off transistors
+	DELAY_CLK;
+
 	PORTB |= 0x70; //activate hi-z, leave everything else
 	PORTA = 0xFF; //pullups
 	DDRA = 0x00; //inputs
