@@ -193,11 +193,12 @@ void display_digits()
 			tmp /= 10; //get next value
 		}
 	}
-
-	PORTB |= 0x70;
-	PORTA = 0xFF;
-	DDRA = 0x00;
-	DELAY_CLK; //let everything settle
+	//take this out
+	//PORTB |= 0x70;
+	//PORTA = 0xFF;
+	//DDRA = 0x00;
+	//DELAY_CLK; //let everything settle
+	//take this out
 }
 
 /*****************************************************************************************
