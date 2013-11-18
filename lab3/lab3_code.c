@@ -328,10 +328,6 @@ ISR(TIMER0_OVF_vect)
 	/* Ensure number is always between 0 and COUNT_MAX */
 	number %= COUNT_MAX + 1;
 
-	//PORTA = 0xFF;//old_PORTA;
-	//PORTB = 0x50;//old_PORTB;
-	//DDRA = 0xFF;//old_DDRA;
-	//DELAY_CLK;
 	PORTB = old_PORTB;
 	DELAY_CLK;
 }
