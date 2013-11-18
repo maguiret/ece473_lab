@@ -40,7 +40,7 @@
 #define SS PB0
 #define SCK PB1
 #define MOSI PB2
-#define COUNT_MAX 1023
+//#define COUNT_MAX 1023
 #define SECONDS_MAX 86400
 
 /* 2 cycle delay */
@@ -50,6 +50,7 @@
 volatile uint16_t number;
 
 /* Global variable to hold number of seconds elapsed in the day */
+//volatile uint32_t seconds = 0;
 volatile uint32_t seconds = 0;
 
 /* Counters for various ISRs */
@@ -162,22 +163,32 @@ void button_mode_toggle(uint8_t button)
 
 /*****************************************************************************************
  * Function:		display_digits
- * Description:		Function takes a 16 bit (4 digit base 10) number and displays each
- * 			 number on the appropriate digit. 
- * Arguments:		None, number is global
+ * Description:		Function takes global seconds variable, breaks it up into minutes
+ * 			 and hours, displays those. Blinks colon at the seconds interval
+ * Arguments:		None
  * Return:		None
  ****************************************************************************************/
 void display_digits() 
 {
-	//uint16_t tmp = number; //tmp variable to modify number for display
-	uint16_t tmp = seconds; //tmp variable to modify number for display
+	uint32_t tmp_sec = seconds; //tmp variable to modify number for display
 	uint8_t cur_value; //current digit value to display
 	uint8_t cur_digit = 0; //current digit to display on
 
-	//Set Register A
+	/* Set Register A */
 	PORTA = 0xFF; //pullups
 	DDRA = 0xFF; //output
 	DELAY_CLK;
+
+	/* Converts seconds to minutes, gets minutes for any given hour with mod */
+	uint8_t minutes = ((tmp_sec / 60) % 60);
+	/* Converts seconds to hours, will not exceed 24 due to other program logic */
+	uint8_t hours = (tmp_sec / 3600);
+
+	/* Isolates most and least significant bits of each variable */
+	uint8_t min_l = minutes % 10;
+	uint8_t min_h = minutes / 10;
+	uint8_t hrs_l = hours % 10;
+	uint8_t hrs_h = hours / 10;
 
 	/* Loop displays each base 10 digit one by one. Mods by 10 to get digit, displays
 	 * encoded digit to 7-seg, divides by 10 to get next digit. Loops until cur_value
@@ -190,16 +201,16 @@ void display_digits()
 		DELAY_CLK;
 		PORTB |= decoder_select[cur_digit]; //set portb decoder bits
 
-		/* Display when number is 0 */
-		if (tmp < 1 && cur_digit == 0) {
-			PORTA = sev_seg_digits[0]; //display digit
-		}
+		if (cur_digit == 0) 
+			cur_value = min_l;
+		else if (cur_digit == 1) 
+			cur_value = min_h;
+		else if (cur_digit == 2) 
+			cur_value = hrs_l;
+		else if (cur_digit == 3) 
+			cur_value = hrs_h;
 
-		/* Display current digit */
-		if (tmp >= 1) {
-			cur_value = tmp % 10; //get current digit to display
-			PORTA = sev_seg_digits[cur_value]; //display digit
-		}
+		PORTA = sev_seg_digits[cur_value]; //display digit
 
 		/* Display colon (or not) */
 		if (cur_digit == 4 && colon_state == 1)
@@ -209,10 +220,30 @@ void display_digits()
 
 		_delay_loop_1(200); //delay for about arg*3 cycles
 
-		/* Get next digit if possible */
-		if (tmp >= 1) {
-			tmp /= 10; //get next value
-		}
+
+		///* Display when number is 0 */
+		//if (tmp < 1 && cur_digit == 0) {
+		//	PORTA = sev_seg_digits[0]; //display digit
+		//}
+
+		///* Display current digit */
+		//if (tmp >= 1) {
+		//	cur_value = tmp % 10; //get current digit to display
+		//	PORTA = sev_seg_digits[cur_value]; //display digit
+		//}
+
+		///* Display colon (or not) */
+		//if (cur_digit == 4 && colon_state == 1)
+		//	PORTA = 0xFC; //colon on
+		//else if (cur_digit == 4 && colon_state != 1)
+		//	PORTA = 0xFF; //colon off
+
+		//_delay_loop_1(200); //delay for about arg*3 cycles
+
+		///* Get next digit if possible */
+		//if (tmp >= 1) {
+		//	tmp /= 10; //get next value
+		//}
 	}
 }
 
@@ -369,8 +400,8 @@ ISR(TIMER0_OVF_vect)
 	INT0_count++;
 	if (INT0_count == 128) {
 		seconds++;
-		if (seconds > COUNT_MAX)
-			seconds -= COUNT_MAX;
+		if (seconds > SECONDS_MAX)
+			seconds -= SECONDS_MAX;
 		colon_state ^= 0x01; //toggle state of colon
 		INT0_count = 0;
 	}
