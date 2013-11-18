@@ -1,6 +1,6 @@
 PRG            =lab4_code
 
-OBJ            = $(PRG).o
+OBJ            = $(PRG).o lcd_functions.o
 
 MCU_TARGET     = atmega128
 OPTIMIZE       = -O2    # options are 1, 2, 3, s

@@ -33,6 +33,7 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
+#include "lcd_functions.h"
 
 #define F_CPU 16000000 // cpu speed in hertz 
 
@@ -269,19 +270,78 @@ uint8_t read_encoder(uint8_t encoder)
 	return ret;
 }
 
+///*****************************************************************************************
+// * Function:		Interrupt Service Routine for Timer/Counter 0
+// * Description:		Timer runs in asynchronous mode off of crystal oscillator. On
+// * 			 overflow, a counter is incremented. When the counter reaches 128,
+// * 			 a second of time has passed, and the seconds variable is
+// * 			 incremented and the counter is set to zero. If seconds has
+// * 			 reached the end of a day, it is also reset to zero. The buttons
+// * 			 are read every interrupt.
+// * Arguments:		None
+// * Return:		None
+// ****************************************************************************************/
+//ISR(TIMER0_OVF_vect)
+//{
+//	read_buttons();
+//
+//	/* Sets the counter step size based on button mode
+//	 * steps by 1 (default) if neither pressed
+//	 * steps by 2 if button 1 pressed
+//	 * steps by 4 if button 2 pressed
+//	 * doesn't count if both pressed */
+//	if (pushbutton_mode == 0x00)
+//		step_size = 0x01;
+//	else if (pushbutton_mode == 0x01)
+//		step_size = 0x02;
+//	else if (pushbutton_mode == 0x02)
+//		step_size = 0x04;
+//	else if (pushbutton_mode == 0x03)
+//		step_size = 0x00;
+//
+//	/* Sets leds on bar graph display */
+//	SPDR = pushbutton_mode; //sets value of SPI data register to mode value
+//	while(bit_is_clear(SPSR, SPIF)); //waits for serial transmission to complete
+//	PORTB |= 0x70;
+//	PORTB &= 0xEF; //toggle bar graph regclk
+//	PORTB |= 0x10;
+//
+//	/* Check both encoders for rotation */
+//	PORTB |= 0x01; //toggle shift load on encoder board
+//	SPDR = 0x00; //write a zero for filler purposes
+//	while(bit_is_clear(SPSR, SPIF)); //wait for write to finish
+//	PORTB &= 0xFE; //clear shift load bit on encoder board
+//
+//	uint8_t check_1 = read_encoder(1);
+//	uint8_t check_2 = read_encoder(2);
+//
+//	/* If a clockwise turn was made, increment count */
+//	if (check_1 == 0 || check_2 == 0)
+//		number += step_size;
+//
+//	/* If a counterclockwise turn was made, decrement count */
+//	if (check_1 == 1 || check_2 == 1)
+//		number -= step_size;
+//
+//	/* Ensure number is always between 0 and COUNT_MAX */
+//	number %= COUNT_MAX + 1;
+//	
+//	display_digits();
+//}
+
 /*****************************************************************************************
- * Function:		Interrupt Service Routine
- * Description:		On TCNT0 overflow, buttons are checked to set mode, mode is
- * 			 displayed on the bar graph display, the encoders are checked, and
- * 			 the global count is incremented or decremented based on whether
- * 			 the encoder was turned clockwise or counter clockwise
- * 			 respectively
+ * Function:		Interrupt Service Routine for Timer/Counter 0
+ * Description:		Timer runs in asynchronous mode off of crystal oscillator. On
+ * 			 overflow, a counter is incremented. When the counter reaches 128,
+ * 			 a second of time has passed, and the seconds variable is
+ * 			 incremented and the counter is set to zero. If seconds has
+ * 			 reached the end of a day, it is also reset to zero. The buttons
+ * 			 are read every interrupt.
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
 ISR(TIMER0_OVF_vect)
 {
-	read_buttons();
 
 	/* Sets the counter step size based on button mode
 	 * steps by 1 (default) if neither pressed
@@ -325,7 +385,52 @@ ISR(TIMER0_OVF_vect)
 	number %= COUNT_MAX + 1;
 	
 	display_digits();
+
+	read_buttons();
 }
+
+/*****************************************************************************************
+ * Function:		Interrupt Service Routine for Timer/Counter 1
+ * Description:		On TCNT0 overflow, buttons are checked to set mode, mode is
+ * 			 displayed on the bar graph display, the encoders are checked, and
+ * 			 the global count is incremented or decremented based on whether
+ * 			 the encoder was turned clockwise or counter clockwise
+ * 			 respectively
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+ISR(TIMER1_OVF_vect)
+{
+}
+
+/*****************************************************************************************
+ * Function:		Interrupt Service Routine for Timer/Counter 2
+ * Description:		On TCNT0 overflow, buttons are checked to set mode, mode is
+ * 			 displayed on the bar graph display, the encoders are checked, and
+ * 			 the global count is incremented or decremented based on whether
+ * 			 the encoder was turned clockwise or counter clockwise
+ * 			 respectively
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+ISR(TIMER2_COMP_vect)
+{
+}
+
+/*****************************************************************************************
+ * Function:		Interrupt Service Routine for Timer/Counter 3
+ * Description:		On TCNT0 overflow, buttons are checked to set mode, mode is
+ * 			 displayed on the bar graph display, the encoders are checked, and
+ * 			 the global count is incremented or decremented based on whether
+ * 			 the encoder was turned clockwise or counter clockwise
+ * 			 respectively
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+ISR(TIMER3_COMPA_vect)
+{
+}
+
 
 /*****************************************************************************************
  ********************************* MAIN FUNCTION *****************************************
