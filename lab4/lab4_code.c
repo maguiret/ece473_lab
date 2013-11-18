@@ -26,7 +26,26 @@
  *****************************************************************************************
  *
  ****************************LAB 3 SPECIFICS**********************************************
- * - 
+ * - Come back to this
+ *****************************************************************************************
+ *
+ ****************************LAB 4 SPECIFICS**********************************************
+ * - Pushbutton interface:
+ *   --------------------------------------------------
+ *   |  __    __    __    __    __    __    __    __  |
+ *   | /  \  /  \  /  \  /  \  /  \  /  \  /  \  /  \ |
+ *   | \__/  \__/  \__/  \__/  \__/  \__/  \__/  \__/ |
+ *   |   7     6     5     4     3     2     1     0  |
+ *   --------------------------------------------------
+ *     None:
+ *     0: 12/24 hr mode switch (extended feature)
+ *     1: Set clock time
+ *     2: Set alarm time
+ *     3: Alarm on/off
+ *     4:
+ *     5:
+ *     6:
+ *     7: Press for snooze
  *****************************************************************************************
  */
 
@@ -43,6 +62,12 @@
 //#define COUNT_MAX 1023
 #define SECONDS_MAX 86400
 
+#define COLON_AM 0xFC
+#define COLON_PM 0xF8
+
+#define TRUE 1
+#define FALSE 0
+
 /* 2 cycle delay */
 #define DELAY_CLK do{asm("nop");asm("nop");}while(0)
 
@@ -58,6 +83,9 @@ volatile uint8_t INT0_count = 0;
 
 /* Holds the on/off state of the clock colon */
 volatile uint8_t colon_state = 0;
+
+/* Holds the state of 12 vs 24 hour time format */
+//volatile uint8_t twelve_hr = FALSE;
 
 /* Global variable to hold mode determined by push buttons */
 volatile uint8_t pushbutton_mode = 0x00;
@@ -155,10 +183,16 @@ int8_t debounce_switch_a(uint8_t button)
  ****************************************************************************************/
 void button_mode_toggle(uint8_t button)
 {
-	if (button == 0)
+	if (button == 0) { //am/pm
 		pushbutton_mode ^= 0x01; //toggle first bit
-	else if (button == 1)
-		pushbutton_mode ^= 0x02; //toggle second bit
+		//twelve_hr ^= 0x01; //toggle 12 hour mode
+	} else if (button == 1) { //clock set
+	 	pushbutton_mode  ^= 0x02; //toggle second bit
+	} else if (button == 2) { //alarm set
+	 	pushbutton_mode  ^= 0x03; //toggle third bit
+	} else if (button == 3) { //alarm armed
+		pushbutton_mode ^= 0x02; //toggle fourth bit
+	}
 }
 
 /*****************************************************************************************
@@ -181,8 +215,13 @@ void display_digits()
 
 	/* Converts seconds to minutes, gets minutes for any given hour with mod */
 	uint8_t minutes = ((tmp_sec / 60) % 60);
-	/* Converts seconds to hours, will not exceed 24 due to other program logic */
+
+	/* Converts seconds to hours, will not exceed 24 due to other program logic,
+	 * handles both 24 and 12 hour time */
 	uint8_t hours = (tmp_sec / 3600);
+	if
+	if (pushbutton_mode & 0x01 == TRUE)
+		hours ;
 
 	/* Isolates most and least significant bits of each variable */
 	uint8_t min_l = minutes % 10;
@@ -201,6 +240,7 @@ void display_digits()
 		DELAY_CLK;
 		PORTB |= decoder_select[cur_digit]; //set portb decoder bits
 
+		/* Select which value will be displayed on digit */
 		if (cur_digit == 0) 
 			cur_value = min_l;
 		else if (cur_digit == 1) 
@@ -214,36 +254,12 @@ void display_digits()
 
 		/* Display colon (or not) */
 		if (cur_digit == 4 && colon_state == 1)
-			PORTA = 0xFC; //colon on
+			PORTA = COLON_AM; //colon on
+				//COLON_PM
 		else if (cur_digit == 4 && colon_state != 1)
 			PORTA = 0xFF; //colon off
 
 		_delay_loop_1(200); //delay for about arg*3 cycles
-
-
-		///* Display when number is 0 */
-		//if (tmp < 1 && cur_digit == 0) {
-		//	PORTA = sev_seg_digits[0]; //display digit
-		//}
-
-		///* Display current digit */
-		//if (tmp >= 1) {
-		//	cur_value = tmp % 10; //get current digit to display
-		//	PORTA = sev_seg_digits[cur_value]; //display digit
-		//}
-
-		///* Display colon (or not) */
-		//if (cur_digit == 4 && colon_state == 1)
-		//	PORTA = 0xFC; //colon on
-		//else if (cur_digit == 4 && colon_state != 1)
-		//	PORTA = 0xFF; //colon off
-
-		//_delay_loop_1(200); //delay for about arg*3 cycles
-
-		///* Get next digit if possible */
-		//if (tmp >= 1) {
-		//	tmp /= 10; //get next value
-		//}
 	}
 }
 
@@ -397,6 +413,11 @@ uint8_t read_encoder(uint8_t encoder)
  ****************************************************************************************/
 ISR(TIMER0_OVF_vect)
 {
+	/* Save register states */
+	uint8_t old_PORTA = PORTA;
+	uint8_t old_PORTB = PORTB;
+	uint8_t old_DDRA = DDRA;
+
 	INT0_count++;
 	if (INT0_count == 128) {
 		seconds++;
@@ -406,6 +427,12 @@ ISR(TIMER0_OVF_vect)
 		INT0_count = 0;
 	}
 	read_buttons();
+
+	/* Restore register states */
+	PORTA = old_PORTA;
+	PORTB = old_PORTB;
+	DDRA = old_DDRA;
+	DELAY_CLK;
 }
 
 /*****************************************************************************************
