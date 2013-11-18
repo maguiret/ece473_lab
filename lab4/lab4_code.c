@@ -88,6 +88,7 @@ volatile uint8_t colon_state = 0;
 //volatile uint8_t twelve_hr = FALSE;
 
 /* Global variable to hold mode determined by push buttons */
+//volatile uint8_t pushbutton_mode = 0x00;
 volatile uint8_t pushbutton_mode = 0x00;
 
 /* Sets the step size for the encoder counter */
@@ -189,9 +190,9 @@ void button_mode_toggle(uint8_t button)
 	} else if (button == 1) { //clock set
 	 	pushbutton_mode  ^= 0x02; //toggle second bit
 	} else if (button == 2) { //alarm set
-	 	pushbutton_mode  ^= 0x03; //toggle third bit
+	 	pushbutton_mode  ^= 0x04; //toggle third bit
 	} else if (button == 3) { //alarm armed
-		pushbutton_mode ^= 0x02; //toggle fourth bit
+		pushbutton_mode ^= 0x08; //toggle fourth bit
 	}
 }
 
@@ -207,6 +208,7 @@ void display_digits()
 	uint32_t tmp_sec = seconds; //tmp variable to modify number for display
 	uint8_t cur_value; //current digit value to display
 	uint8_t cur_digit = 0; //current digit to display on
+	uint8_t colon;
 
 	/* Set Register A */
 	PORTA = 0xFF; //pullups
@@ -219,9 +221,24 @@ void display_digits()
 	/* Converts seconds to hours, will not exceed 24 due to other program logic,
 	 * handles both 24 and 12 hour time */
 	uint8_t hours = (tmp_sec / 3600);
-	if
-	if (pushbutton_mode & 0x01 == TRUE)
-		hours ;
+	
+	/* If am/pm mode */
+	if (pushbutton_mode & 0x01 == TRUE) {
+		/* Set colon appropriately, convert to 12 hr time */
+		if (hours == 0) {
+			hours += 12;
+			colon = COLON_AM;
+		} else if (hours > 0 && hours < 12) {
+			colon = COLON_AM;
+		} else if (hours == 12) {
+			colon = COLON_PM;
+		} else {
+			hours -= 12;
+			colon = COLON_PM;
+		}
+	} else {
+		colon = COLON_AM;
+	}
 
 	/* Isolates most and least significant bits of each variable */
 	uint8_t min_l = minutes % 10;
@@ -254,8 +271,7 @@ void display_digits()
 
 		/* Display colon (or not) */
 		if (cur_digit == 4 && colon_state == 1)
-			PORTA = COLON_AM; //colon on
-				//COLON_PM
+			PORTA = colon; //colon on
 		else if (cur_digit == 4 && colon_state != 1)
 			PORTA = 0xFF; //colon off
 
@@ -421,11 +437,12 @@ ISR(TIMER0_OVF_vect)
 	INT0_count++;
 	if (INT0_count == 128) {
 		seconds++;
-		if (seconds > SECONDS_MAX)
-			seconds -= SECONDS_MAX;
+		if (seconds == SECONDS_MAX)
+			seconds = 0;
 		colon_state ^= 0x01; //toggle state of colon
 		INT0_count = 0;
 	}
+
 	read_buttons();
 
 	/* Restore register states */
