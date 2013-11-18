@@ -39,7 +39,9 @@
 #define SS PB0
 #define SCK PB1
 #define MOSI PB2
+#define COUNT_MAX 1023
 
+/* 2 cycle delay */
 #define DELAY_CLK do{asm("nop");asm("nop");}while(0)
 #define COUNT_MAX 1023
 
@@ -173,6 +175,7 @@ void display_digits()
 		PORTA = 0xFF; //clear PORTA
 		DELAY_CLK;
 		PORTB &= 0x8F; //clear decoder bits
+		DELAY_CLK;
 		PORTB |= decoder_select[cur_digit]; //set portb decoder bits
 
 		/* Display when number is 0 */
@@ -281,7 +284,16 @@ uint8_t read_encoder(uint8_t encoder)
  ****************************************************************************************/
 ISR(TIMER0_OVF_vect)
 {
+	uint8_t old_PORTA = PORTA;
+	uint8_t old_PORTB = PORTB;
+	uint8_t old_DDRA = DDRA;
+
 	read_buttons();
+
+	PORTA = old_PORTA;
+	PORTB = old_PORTB;
+	DDRA = old_DDRA;
+	DELAY_CLK;
 
 	/* Sets the counter step size based on button mode
 	 * steps by 1 (default) if neither pressed
@@ -323,8 +335,9 @@ ISR(TIMER0_OVF_vect)
 
 	/* Ensure number is always between 0 and COUNT_MAX */
 	number %= COUNT_MAX + 1;
-	
-	display_digits();
+
+	PORTB = old_PORTB;
+	DELAY_CLK;
 }
 
 /*****************************************************************************************
@@ -344,5 +357,7 @@ int main()
 	/* enable interrupts */
 	sei();
 
-	while (1);
+	while (1) {
+		display_digits();
+	}
 }
