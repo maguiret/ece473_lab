@@ -41,6 +41,7 @@
 #define SCK PB1
 #define MOSI PB2
 #define COUNT_MAX 1023
+#define SECONDS_MAX 86400
 
 /* 2 cycle delay */
 #define DELAY_CLK do{asm("nop");asm("nop");}while(0)
@@ -53,6 +54,9 @@ volatile uint32_t seconds = 0;
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
+
+/* Holds the on/off state of the clock colon */
+volatile uint8_t colon_state = 0;
 
 /* Global variable to hold mode determined by push buttons */
 volatile uint8_t pushbutton_mode = 0x00;
@@ -87,7 +91,7 @@ volatile uint8_t decoder_select[6] = {
 	0b00010000, //tens place
 	0b00110000, //hundreds place
 	0b01000000, //thousands place
-	0b00010000, //center colon
+	0b00100000, //center colon
 	0b01110000  //hi-Z mode
 };
 
@@ -178,7 +182,7 @@ void display_digits()
 	/* Loop displays each base 10 digit one by one. Mods by 10 to get digit, displays
 	 * encoded digit to 7-seg, divides by 10 to get next digit. Loops until cur_value
 	 * is less than 1. */
-	for (cur_digit = 0; cur_digit < 4; cur_digit++) {
+	for (cur_digit = 0; cur_digit < 5; cur_digit++) {
 
 		PORTA = 0xFF; //clear PORTA
 		DELAY_CLK;
@@ -196,6 +200,12 @@ void display_digits()
 			cur_value = tmp % 10; //get current digit to display
 			PORTA = sev_seg_digits[cur_value]; //display digit
 		}
+
+		/* Display colon (or not) */
+		if (cur_digit == 4 && colon_state == 1)
+			PORTA = 0xFC; //colon on
+		else if (cur_digit == 4 && colon_state != 1)
+			PORTA = 0xFF; //colon off
 
 		_delay_loop_1(200); //delay for about arg*3 cycles
 
@@ -361,8 +371,10 @@ ISR(TIMER0_OVF_vect)
 		seconds++;
 		if (seconds > COUNT_MAX)
 			seconds -= COUNT_MAX;
+		colon_state ^= 0x01; //toggle state of colon
 		INT0_count = 0;
 	}
+	read_buttons();
 }
 
 /*****************************************************************************************
@@ -419,7 +431,7 @@ int main()
 	/* Initialization */
 	DDRA = 0xFF; //outputs
 	DDRB = 0xF0; //outputs on high nibble
-	TCNT0_init(); //initialize the 8-bit timer counter register
+	TCNT0_init(); //initialize timer/counter 0
 	SPI_init(); //initialize SPI master on PORTB 1-3
 
 	/* enable interrupts */
