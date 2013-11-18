@@ -48,6 +48,12 @@
 /* Global variable to hold current displayed number */
 volatile uint16_t number;
 
+/* Global variable to hold number of seconds elapsed in the day */
+volatile uint32_t seconds = 0;
+
+/* Counters for various ISRs */
+volatile uint8_t INT0_count = 0;
+
 /* Global variable to hold mode determined by push buttons */
 volatile uint8_t pushbutton_mode = 0x00;
 
@@ -97,8 +103,9 @@ volatile uint16_t state[8] = {0,0,0,0,0,0,0,0};
  ****************************************************************************************/
 void TCNT0_init() 
 {
+	ASSR |= (1 << AS0); //enable asynchronous mode (oscillator acts as clock)
 	TIMSK |= (1<<TOIE0); //enable timer/counter0 overflow interrupt
-	TCCR0 |= (1<<CS01); //normal mode, prescale by 8
+	TCCR0 |= (1<<CS00); //normal mode, prescale by 8
 }
 
 /*****************************************************************************************
@@ -158,7 +165,8 @@ void button_mode_toggle(uint8_t button)
  ****************************************************************************************/
 void display_digits() 
 {
-	uint16_t tmp = number; //tmp variable to modify number for display
+	//uint16_t tmp = number; //tmp variable to modify number for display
+	uint16_t tmp = seconds; //tmp variable to modify number for display
 	uint8_t cur_value; //current digit value to display
 	uint8_t cur_digit = 0; //current digit to display on
 
@@ -196,12 +204,6 @@ void display_digits()
 			tmp /= 10; //get next value
 		}
 	}
-	//take this out
-	//PORTB |= 0x70;
-	//PORTA = 0xFF;
-	//DDRA = 0x00;
-	//DELAY_CLK; //let everything settle
-	//take this out
 }
 
 /*****************************************************************************************
@@ -285,7 +287,16 @@ uint8_t read_encoder(uint8_t encoder)
 // ****************************************************************************************/
 //ISR(TIMER0_OVF_vect)
 //{
+//	uint8_t old_PORTA = PORTA;
+//	uint8_t old_PORTB = PORTB;
+//	uint8_t old_DDRA = DDRA;
+//
 //	read_buttons();
+//
+//	PORTA = old_PORTA;
+//	PORTB = old_PORTB;
+//	DDRA = old_DDRA;
+//	DELAY_CLK;
 //
 //	/* Sets the counter step size based on button mode
 //	 * steps by 1 (default) if neither pressed
@@ -327,8 +338,9 @@ uint8_t read_encoder(uint8_t encoder)
 //
 //	/* Ensure number is always between 0 and COUNT_MAX */
 //	number %= COUNT_MAX + 1;
-//	
-//	display_digits();
+//
+//	PORTB = old_PORTB;
+//	DELAY_CLK;
 //}
 
 /*****************************************************************************************
@@ -344,60 +356,13 @@ uint8_t read_encoder(uint8_t encoder)
  ****************************************************************************************/
 ISR(TIMER0_OVF_vect)
 {
-	uint8_t old_PORTA = PORTA;
-	uint8_t old_PORTB = PORTB;
-	uint8_t old_DDRA = DDRA;
-
-	read_buttons();
-
-	PORTA = old_PORTA;
-	PORTB = old_PORTB;
-	DDRA = old_DDRA;
-	DELAY_CLK;
-
-	/* Sets the counter step size based on button mode
-	 * steps by 1 (default) if neither pressed
-	 * steps by 2 if button 1 pressed
-	 * steps by 4 if button 2 pressed
-	 * doesn't count if both pressed */
-	if (pushbutton_mode == 0x00)
-		step_size = 0x01;
-	else if (pushbutton_mode == 0x01)
-		step_size = 0x02;
-	else if (pushbutton_mode == 0x02)
-		step_size = 0x04;
-	else if (pushbutton_mode == 0x03)
-		step_size = 0x00;
-
-	/* Sets leds on bar graph display */
-	SPDR = pushbutton_mode; //sets value of SPI data register to mode value
-	while(bit_is_clear(SPSR, SPIF)); //waits for serial transmission to complete
-	PORTB |= 0x70;
-	PORTB &= 0xEF; //toggle bar graph regclk
-	PORTB |= 0x10;
-
-	/* Check both encoders for rotation */
-	PORTB |= 0x01; //toggle shift load on encoder board
-	SPDR = 0x00; //write a zero for filler purposes
-	while(bit_is_clear(SPSR, SPIF)); //wait for write to finish
-	PORTB &= 0xFE; //clear shift load bit on encoder board
-
-	uint8_t check_1 = read_encoder(1);
-	uint8_t check_2 = read_encoder(2);
-
-	/* If a clockwise turn was made, increment count */
-	if (check_1 == 0 || check_2 == 0)
-		number += step_size;
-
-	/* If a counterclockwise turn was made, decrement count */
-	if (check_1 == 1 || check_2 == 1)
-		number -= step_size;
-
-	/* Ensure number is always between 0 and COUNT_MAX */
-	number %= COUNT_MAX + 1;
-
-	PORTB = old_PORTB;
-	DELAY_CLK;
+	INT0_count++;
+	if (INT0_count == 128) {
+		seconds++;
+		if (seconds > COUNT_MAX)
+			seconds -= COUNT_MAX;
+		INT0_count = 0;
+	}
 }
 
 /*****************************************************************************************
