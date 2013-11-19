@@ -71,11 +71,13 @@
 /* 2 cycle delay */
 #define DELAY_CLK do{asm("nop");asm("nop");}while(0)
 
+/* Temp variable for controlling/testing display pwm */
+volatile uint8_t pwm_dir = 1;
+
 /* Global variable to hold current displayed number */
 volatile uint16_t number;
 
 /* Global variable to hold number of seconds elapsed in the day */
-//volatile uint32_t seconds = 0;
 volatile uint32_t seconds = 0;
 
 /* Counters for various ISRs */
@@ -84,11 +86,7 @@ volatile uint8_t INT0_count = 0;
 /* Holds the on/off state of the clock colon */
 volatile uint8_t colon_state = 0;
 
-/* Holds the state of 12 vs 24 hour time format */
-//volatile uint8_t twelve_hr = FALSE;
-
 /* Global variable to hold mode determined by push buttons */
-//volatile uint8_t pushbutton_mode = 0x00;
 volatile uint8_t pushbutton_mode = 0x00;
 
 /* Sets the step size for the encoder counter */
@@ -140,6 +138,21 @@ void TCNT0_init()
 	ASSR |= (1 << AS0); //enable asynchronous mode (oscillator acts as clock)
 	TIMSK |= (1<<TOIE0); //enable timer/counter0 overflow interrupt
 	TCCR0 |= (1<<CS00); //normal mode, prescale by 8
+}
+
+/*****************************************************************************************
+ * Function:		TCNT2_init
+ * Description:		Initializes timer/counter 2
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void TCNT2_init() 
+{
+	TIMSK |= (1 << OCIE2); //enable timer/counter2 compare interrupt
+	TCCR2 |= ((1 << WGM21) | (1 << WGM20) | //set fast PWM mode
+		  (1 << COM21) | (1 << COM20) | //inverted PWM (for active low)
+		  (1<<CS00)); //prescale by 8
+	OCR2 = 0x7F; //Initialize at 50% duty cycle
 }
 
 /*****************************************************************************************
@@ -223,7 +236,7 @@ void display_digits()
 	uint8_t hours = (tmp_sec / 3600);
 	
 	/* If am/pm mode */
-	if (pushbutton_mode & 0x01 == TRUE) {
+	if ((pushbutton_mode & 0x01) == TRUE) {
 		/* Set colon appropriately, convert to 12 hr time */
 		if (hours == 0) {
 			hours += 12;
@@ -443,6 +456,16 @@ ISR(TIMER0_OVF_vect)
 		INT0_count = 0;
 	}
 
+	if (pwm_dir == 1)
+		OCR2++;
+	else
+		OCR2--;
+
+	if (OCR2 == 0)
+		pwm_dir = 1;
+	else if (OCR2 == 255)
+		pwm_dir = 0;
+
 	read_buttons();
 
 	/* Restore register states */
@@ -468,17 +491,12 @@ ISR(TIMER1_OVF_vect)
 
 /*****************************************************************************************
  * Function:		Interrupt Service Routine for Timer/Counter 2
- * Description:		On TCNT0 overflow, buttons are checked to set mode, mode is
- * 			 displayed on the bar graph display, the encoders are checked, and
- * 			 the global count is incremented or decremented based on whether
- * 			 the encoder was turned clockwise or counter clockwise
- * 			 respectively
+ * Description:		Timer/Counter 2 controls the display dimming PWM. The PWM is
+ * 			 controlled purely by the setup, and as such no ISR is required.
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
-ISR(TIMER2_COMP_vect)
-{
-}
+ISR(TIMER2_COMP_vect) {}
 
 /*****************************************************************************************
  * Function:		Interrupt Service Routine for Timer/Counter 3
@@ -507,6 +525,7 @@ int main()
 	DDRA = 0xFF; //outputs
 	DDRB = 0xF0; //outputs on high nibble
 	TCNT0_init(); //initialize timer/counter 0
+	TCNT2_init(); //initialize timer/counter 2
 	SPI_init(); //initialize SPI master on PORTB 1-3
 
 	/* enable interrupts */
