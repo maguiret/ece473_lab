@@ -71,9 +71,6 @@
 /* 2 cycle delay */
 #define DELAY_CLK do{asm("nop");asm("nop");}while(0)
 
-/* Temp variable for controlling/testing display pwm */
-volatile uint8_t pwm_dir = 1;
-
 /* Global variable to hold current displayed number */
 volatile uint16_t number;
 
@@ -156,6 +153,22 @@ void TCNT2_init()
 }
 
 /*****************************************************************************************
+ * Function:		TCNT3_init
+ * Description:		Initializes timer/counter 3
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void TCNT3_init() 
+{
+	ETIMSK |= (1 << OCIE3A); //enable timer/counter3a compare interrupt
+	TCCR3A |= ((1 << WGM30) | //set fast PWM 8 bit mode
+		   (1 << COM3A1)); //non-inverted PWM (for active high)
+	TCCR3B |= ((1 << WGM32) | //set fast PWM 8 bit mode
+		   (1 << CS32)); //256 clock prescaler
+	OCR3AL = 0x7F; //Initialize at 50% duty cycle, only low is used for 8 bit PWM
+}
+
+/*****************************************************************************************
  * Function:		SPI_init
  * Description:		Initializes SPI on PORTB in master mode
  * Arguments:		None
@@ -169,6 +182,19 @@ void SPI_init()
 	SPCR |= ((1 << SPE) |  //enables SPI
 		 (1 << MSTR));  //sets master SPI mode
 	SPSR |= (1 << SPI2X);  //sets a clock/2 prescalar
+}
+
+/*****************************************************************************************
+ * Function:		led_display_init
+ * Description:		Initialized upper half of DDRB for brightness pwm and digit select
+ * 			 output, initializes DDRA for LED display output
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void led_display_init()
+{
+	DDRA = 0xFF;
+	DDRB = 0xF0;
 }
 
 /*****************************************************************************************
@@ -236,7 +262,7 @@ void display_digits()
 	uint8_t hours = (tmp_sec / 3600);
 	
 	/* If am/pm mode */
-	if ((pushbutton_mode & 0x01) == TRUE) {
+	if ((pushbutton_mode & 0x01) == FALSE) {
 		/* Set colon appropriately, convert to 12 hr time */
 		if (hours == 0) {
 			hours += 12;
@@ -447,6 +473,8 @@ ISR(TIMER0_OVF_vect)
 	uint8_t old_PORTB = PORTB;
 	uint8_t old_DDRA = DDRA;
 
+	static uint8_t pwm_dir = 1;
+
 	INT0_count++;
 	if (INT0_count == 128) {
 		seconds++;
@@ -522,10 +550,10 @@ int main()
 	number = 0; //initialize number
 	
 	/* Initialization */
-	DDRA = 0xFF; //outputs
-	DDRB = 0xF0; //outputs on high nibble
+	led_display_init(); //initialize led display
 	TCNT0_init(); //initialize timer/counter 0
 	TCNT2_init(); //initialize timer/counter 2
+	TCNT3_init(); //initialize timer/counter 3
 	SPI_init(); //initialize SPI master on PORTB 1-3
 
 	/* enable interrupts */
