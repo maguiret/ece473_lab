@@ -79,6 +79,7 @@ volatile uint32_t seconds = 0;
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
+volatile uint8_t INT3_count = 0;
 
 /* Holds the on/off state of the clock colon */
 volatile uint8_t colon_state = 0;
@@ -233,6 +234,24 @@ void button_mode_toggle(uint8_t button)
 	} else if (button == 3) { //alarm armed
 		pushbutton_mode ^= 0x08; //toggle fourth bit
 	}
+}
+
+/*****************************************************************************************
+ * Function:		clock_bargraph
+ * Description:		Function puts pushbutton_mode bit pattern into SPDR to write to
+ * 			 bar graph display, and sets PORTB decoder output to dec6 to latch
+ * 			 data into bargraph
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void clock_bargraph()
+{
+	/* Sets leds on bar graph display */
+	SPDR = pushbutton_mode; //sets value of SPI data register to mode value
+	while(bit_is_clear(SPSR, SPIF)); //waits for serial transmission to complete
+	PORTB |= 0x70;
+	PORTB &= 0xEF; //toggle bar graph regclk
+	PORTB |= 0x10;
 }
 
 /*****************************************************************************************
@@ -538,6 +557,18 @@ ISR(TIMER2_COMP_vect) {}
  ****************************************************************************************/
 ISR(TIMER3_COMPA_vect)
 {
+	//save PORTB
+	
+	INT3_count++;	
+	if (INT3_count == 16) {
+		clock_bargraph();
+		//check_encoders();
+		//OCR3AL = adjust_volume();
+		INT3_count = 0;
+	}
+
+	//restore PORTB
+
 }
 
 
