@@ -77,9 +77,12 @@ volatile uint16_t number;
 /* Global variable to hold number of seconds elapsed in the day */
 volatile uint32_t seconds = 0;
 
+/* Global variable to hold current volume level */
+volatile uint8_t audio_volume;
+
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
-volatile uint8_t INT3_count = 0;
+volatile uint16_t INT3_count = 0;
 
 /* Holds the on/off state of the clock colon */
 volatile uint8_t colon_state = 0;
@@ -165,8 +168,9 @@ void TCNT3_init()
 	TCCR3A |= ((1 << WGM30) | //set fast PWM 8 bit mode
 		   (1 << COM3A1)); //non-inverted PWM (for active high)
 	TCCR3B |= ((1 << WGM32) | //set fast PWM 8 bit mode
-		   (1 << CS32)); //256 clock prescaler
+		   (1 << CS31)); //8 prescaler
 	OCR3AL = 0x7F; //Initialize at 50% duty cycle, only low is used for 8 bit PWM
+	audio_volume = 0x7F; //Stores value to audio volume variable
 }
 
 /*****************************************************************************************
@@ -405,6 +409,38 @@ uint8_t read_encoder(uint8_t encoder)
 	return ret;
 }
 
+/*****************************************************************************************
+ * Function:		check_encoders
+ * Description:		Function reads the state of the encoders and modifies variables
+ * 			 based upon the current program mode
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void check_encoders()
+{
+	/* Check both encoders for rotation */
+	PORTB |= 0x01; //toggle shift load on encoder board
+	SPDR = 0x00; //write a zero for filler purposes
+	while(bit_is_clear(SPSR, SPIF)); //wait for write to finish
+	PORTB &= 0xFE; //clear shift load bit on encoder board
+								    
+	uint8_t check_1 = read_encoder(1);
+	uint8_t check_2 = read_encoder(2);
+
+	if (check_1 == 0 || check_2 == 0)
+		seconds += 60;
+	else if (check_1 == 1 || check_2 == 1)
+		seconds -= 60;
+	///* Process the encoder reads based on active setting */
+	//if ((pushbutton_mode & 0x02) == TRUE) {
+	//	//set clock time
+	//} else if ((pushbutton_mode & 0x04) == TRUE) {
+	//	//set alarm time
+	//} else {
+	//	//set volume
+	//}
+}
+
 ///*****************************************************************************************
 // * Function:		Interrupt Service Routine for Timer/Counter 0
 // * Description:		Timer runs in asynchronous mode off of crystal oscillator. On
@@ -524,11 +560,7 @@ ISR(TIMER0_OVF_vect)
 
 /*****************************************************************************************
  * Function:		Interrupt Service Routine for Timer/Counter 1
- * Description:		On TCNT0 overflow, buttons are checked to set mode, mode is
- * 			 displayed on the bar graph display, the encoders are checked, and
- * 			 the global count is incremented or decremented based on whether
- * 			 the encoder was turned clockwise or counter clockwise
- * 			 respectively
+ * Description:		
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
@@ -547,28 +579,29 @@ ISR(TIMER2_COMP_vect) {}
 
 /*****************************************************************************************
  * Function:		Interrupt Service Routine for Timer/Counter 3
- * Description:		On TCNT0 overflow, buttons are checked to set mode, mode is
- * 			 displayed on the bar graph display, the encoders are checked, and
- * 			 the global count is incremented or decremented based on whether
- * 			 the encoder was turned clockwise or counter clockwise
- * 			 respectively
+ * Description:		On TCNT3A compare match, the bargraph display is clocked, the
+ * 			 encoders are read and the appropriate variable is modified, and
+ * 			 the PWM compare match threshold is adjusted based on the value of the
+ * 			 audio volume variable.
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
 ISR(TIMER3_COMPA_vect)
 {
 	//save PORTB
+	uint8_t old_PORTB = PORTB;
 	
 	INT3_count++;	
-	if (INT3_count == 16) {
+	check_encoders();
+	if (INT3_count == 512) {
 		clock_bargraph();
-		//check_encoders();
-		//OCR3AL = adjust_volume();
+		OCR3AL = audio_volume;
 		INT3_count = 0;
 	}
 
 	//restore PORTB
-
+	PORTB = old_PORTB;
+	DELAY_CLK;
 }
 
 
