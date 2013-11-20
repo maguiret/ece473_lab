@@ -46,6 +46,8 @@
  *     5:
  *     6:
  *     7: Press for snooze
+ * 
+ * - Volume output pin is PE3
  *****************************************************************************************
  */
 
@@ -77,8 +79,14 @@ volatile uint16_t number;
 /* Global variable to hold number of seconds elapsed in the day */
 volatile uint32_t seconds = 0;
 
+/* Global variable to hold alarm time in seconds */
+volatile uint32_t alarm_time = 0;
+
 /* Global variable to hold current volume level */
 volatile uint8_t audio_volume;
+
+/* Global variable to hold current state of alarm */
+volatile uint8_t alarm_on = FALSE;
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
@@ -259,6 +267,7 @@ void button_mode_toggle(uint8_t button)
 	 	pushbutton_mode  ^= 0x04; //toggle third bit
 	} else if (button == 3) { //alarm armed
 		pushbutton_mode ^= 0x08; //toggle fourth bit
+		alarm_on ^= 1;
 	}
 }
 
@@ -289,7 +298,12 @@ void clock_bargraph()
  ****************************************************************************************/
 void display_digits() 
 {
-	uint32_t tmp_sec = seconds; //tmp variable to modify number for display
+	uint32_t tmp_sec; //tmp variable to modify number for display
+	if ((pushbutton_mode & 0x04) && //display alarm time if set alarm time mode is
+	    !(pushbutton_mode & 0x02))  //active
+		tmp_sec = alarm_time;
+	else
+		tmp_sec = seconds;
 	uint8_t cur_value; //current digit value to display
 	uint8_t cur_digit = 0; //current digit to display on
 	uint8_t colon;
@@ -307,7 +321,7 @@ void display_digits()
 	uint8_t hours = (tmp_sec / 3600);
 	
 	/* If am/pm mode */
-	if ((pushbutton_mode & 0x01) == FALSE) {
+	if (!(pushbutton_mode & 0x01)) {
 		/* Set colon appropriately, convert to 12 hr time */
 		if (hours == 0) {
 			hours += 12;
@@ -455,12 +469,30 @@ void check_encoders()
 	//	seconds -= 60;
 	
 	/* Process the encoder reads based on active setting */
-	if (((pushbutton_mode & 0x02) == TRUE) &&  //goes to set clock time mode if of the
-	    ((pushbutton_mode & 0x04) == FALSE)) { //mode buttons, only button 1 is pressed
-		//set clock time
-	} else if (((pushbutton_mode & 0x04) == TRUE) &&
-		   ((pushbutton_mode & 0x02) == FALSE)) {
-		//set alarm time
+	if ((pushbutton_mode & 0x02) &&  //goes to set clock time mode if of the
+	    !(pushbutton_mode & 0x04)) { //mode buttons, only button 1 is pressed
+		if (check_1 == 0 || check_2 == 0) {
+			seconds += 60;
+			if (seconds >= SECONDS_MAX)
+				seconds = 0;
+		}
+		if (check_1 == 1 || check_2 == 1) {
+			seconds -= 60;
+			if (seconds > SECONDS_MAX)
+				seconds = SECONDS_MAX-60;
+		}
+	} else if ((pushbutton_mode & 0x04) &&  //goes to set alarm time mode if
+		   !(pushbutton_mode & 0x02)) { //only button 2 is pressed
+		if (check_1 == 0 || check_2 == 0) {
+			alarm_time += 60;
+			if (alarm_time >= SECONDS_MAX)
+				alarm_time = 0;
+		}
+		if (check_1 == 1 || check_2 == 1) {
+			alarm_time -= 60;
+			if (alarm_time > SECONDS_MAX)
+				alarm_time = SECONDS_MAX-60;
+		}
 	} else {
 		if (check_1 == 0)
 			if (audio_volume < 0xFF)
