@@ -87,6 +87,7 @@ volatile uint8_t audio_volume;
 
 /* Global variable to hold current state of alarm */
 volatile uint8_t alarm_on = FALSE;
+volatile uint8_t alarm_going = FALSE;
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
@@ -268,6 +269,14 @@ void button_mode_toggle(uint8_t button)
 	} else if (button == 3) { //alarm armed
 		pushbutton_mode ^= 0x08; //toggle fourth bit
 		alarm_on ^= 1;
+		if (alarm_going == TRUE)
+			alarm_going = FALSE;
+	} else if (button == 7) { //snooze
+		if (alarm_going == TRUE) {
+			alarm_going = FALSE;
+			//alarm_time = (alarm_time + 600) % SECONDS_MAX; //10 minute snooze
+			alarm_time = (alarm_time + 10) % SECONDS_MAX; //10 second snooze
+		}
 	}
 }
 
@@ -595,21 +604,25 @@ ISR(TIMER0_OVF_vect)
 	INT0_count++;
 	if (INT0_count == 128) {
 		seconds++;
+		if (seconds == alarm_time) {
+			alarm_on = TRUE;
+			alarm_going = TRUE;
+		}
 		if (seconds == SECONDS_MAX)
 			seconds = 0;
 		colon_state ^= 0x01; //toggle state of colon
 		INT0_count = 0;
 	}
 
-	if (pwm_dir == 1)
-		OCR2++;
-	else
-		OCR2--;
+	//if (pwm_dir == 1)
+	//	OCR2++;
+	//else
+	//	OCR2--;
 
-	if (OCR2 == 0)
-		pwm_dir = 1;
-	else if (OCR2 == 255)
-		pwm_dir = 0;
+	//if (OCR2 == 0)
+	//	pwm_dir = 1;
+	//else if (OCR2 == 255)
+	//	pwm_dir = 0;
 
 	read_buttons();
 
@@ -629,10 +642,19 @@ ISR(TIMER0_OVF_vect)
 ISR(TIMER1_COMPA_vect)
 {
 	INT1_count++;
-	if ((INT1_count % 2) == 0)
-		PORTD ^= 0x04; //toggle alarm signal bit
-	//ping_lcd();
+	/* Controls alarm, flips bit if on, holds low if not */
+	//if ((alarm_on == TRUE) && ((INT1_count % 2) == 0))
+	//	PORTD |= 0x04; //toggle alarm signal bit on
+	//else
+	//	PORTD &= ~(0x04); //turn alarm bit off
+	if (alarm_going == TRUE)
+		OCR2 = 0x00;
+	else
+		OCR2 = 0x7F;
 	if (INT1_count == 128) {
+		//clear_display();
+		//cursor_home();
+		//string2lcd("ALARM OFF");
 		//read_adc();
 		INT1_count = 0;
 	}
@@ -685,15 +707,19 @@ int main()
 	
 	/* Initialization */
 	port_init(); //initialize remaining ports
+	SPI_init(); //initialize SPI master on PORTB 1-3
+	lcd_init(); //initialize lcd 
 	TCNT0_init(); //initialize timer/counter 0
 	TCNT1_init(); //initialize timer/counter 1
 	TCNT2_init(); //initialize timer/counter 2
 	TCNT3_init(); //initialize timer/counter 3
-	SPI_init(); //initialize SPI master on PORTB 1-3
-	lcd_init(); //initialize lcd 
 
 	/* enable interrupts */
 	sei();
+
+	clear_display();
+	cursor_home();
+	string2lcd("TEST");
 
 	while (1) {
 		display_digits();
