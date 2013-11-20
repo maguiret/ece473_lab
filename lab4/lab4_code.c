@@ -82,6 +82,7 @@ volatile uint8_t audio_volume;
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
+volatile uint8_t INT1_count = 0;
 volatile uint16_t INT3_count = 0;
 
 /* Holds the on/off state of the clock colon */
@@ -139,6 +140,22 @@ void TCNT0_init()
 	ASSR |= (1 << AS0); //enable asynchronous mode (oscillator acts as clock)
 	TIMSK |= (1<<TOIE0); //enable timer/counter0 overflow interrupt
 	TCCR0 |= (1<<CS00); //normal mode, prescale by 8
+}
+
+/*****************************************************************************************
+ * Function:		TCNT1_init
+ * Description:		Initializes timer/counter 1
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void TCNT1_init() 
+{
+	//TIMSK |= (1<<TOIE1); //enable timer/counter1 overflow interrupt
+	TIMSK |= (1<<OCIE1A); //enable timer/counter1 compare interrupt
+	TCCR1B |= ((1<<CS11) | /*(1<<CS10) |*/
+		   (1<<WGM12)); //normal mode, prescale by 64
+	OCR1A = 0x00FF;
+
 }
 
 /*****************************************************************************************
@@ -200,6 +217,17 @@ void led_display_init()
 {
 	DDRA = 0xFF;
 	DDRB = 0xF0;
+}
+
+/*****************************************************************************************
+ * Function:		alarm_init
+ * Description:		Initializes alarm signal bit for output
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void alarm_init()
+{
+	DDRD |= 0x04;
 }
 
 /*****************************************************************************************
@@ -564,8 +592,17 @@ ISR(TIMER0_OVF_vect)
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
-ISR(TIMER1_OVF_vect)
+ISR(TIMER1_COMPA_vect)
 {
+	INT1_count++;
+	if ((INT1_count % 2) == 0)
+		PORTD ^= 0x04; //toggle alarm signal bit
+	//ping_lcd();
+	if (INT1_count == 128) {
+		//read_adc();
+		INT1_count = 0;
+	}
+	//OCR1A = 0xFF00;
 }
 
 /*****************************************************************************************
@@ -614,11 +651,14 @@ int main()
 	number = 0; //initialize number
 	
 	/* Initialization */
-	led_display_init(); //initialize led display
 	TCNT0_init(); //initialize timer/counter 0
+	TCNT1_init(); //initialize timer/counter 1
 	TCNT2_init(); //initialize timer/counter 2
 	TCNT3_init(); //initialize timer/counter 3
+	led_display_init(); //initialize led display
 	SPI_init(); //initialize SPI master on PORTB 1-3
+	alarm_init(); //initialize alarm signal
+	lcd_init(); //initialize lcd 
 
 	/* enable interrupts */
 	sei();
