@@ -150,11 +150,10 @@ void TCNT0_init()
  ****************************************************************************************/
 void TCNT1_init() 
 {
-	//TIMSK |= (1<<TOIE1); //enable timer/counter1 overflow interrupt
 	TIMSK |= (1<<OCIE1A); //enable timer/counter1 compare interrupt
-	TCCR1B |= ((1<<CS11) | /*(1<<CS10) |*/
-		   (1<<WGM12)); //normal mode, prescale by 64
-	OCR1A = 0x00FF;
+	TCCR1B |= ((1<<CS11) |  //prescale by 8
+		   (1<<WGM12)); //CTC mode
+	OCR1A = 0x00FF; //set compare top to simulate 8 bit timer
 
 }
 
@@ -207,27 +206,22 @@ void SPI_init()
 }
 
 /*****************************************************************************************
- * Function:		led_display_init
- * Description:		Initialized upper half of DDRB for brightness pwm and digit select
- * 			 output, initializes DDRA for LED display output
+ * Function:		port_init
+ * Description:		Initialize necessary ports not covered in other init functions
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
-void led_display_init()
+void port_init()
 {
+	/* Initialize LED display */
 	DDRA = 0xFF;
 	DDRB = 0xF0;
-}
 
-/*****************************************************************************************
- * Function:		alarm_init
- * Description:		Initializes alarm signal bit for output
- * Arguments:		None
- * Return:		None
- ****************************************************************************************/
-void alarm_init()
-{
+	/* Initialize the alarm bit */
 	DDRD |= 0x04;
+
+	/* Initialize the volume bit */
+	DDRE |= 0x08;
 }
 
 /*****************************************************************************************
@@ -455,18 +449,26 @@ void check_encoders()
 	uint8_t check_1 = read_encoder(1);
 	uint8_t check_2 = read_encoder(2);
 
-	if (check_1 == 0 || check_2 == 0)
-		seconds += 60;
-	else if (check_1 == 1 || check_2 == 1)
-		seconds -= 60;
-	///* Process the encoder reads based on active setting */
-	//if ((pushbutton_mode & 0x02) == TRUE) {
-	//	//set clock time
-	//} else if ((pushbutton_mode & 0x04) == TRUE) {
-	//	//set alarm time
-	//} else {
-	//	//set volume
-	//}
+	//if (check_1 == 0 || check_2 == 0)
+	//	seconds += 60;
+	//else if (check_1 == 1 || check_2 == 1)
+	//	seconds -= 60;
+	
+	/* Process the encoder reads based on active setting */
+	if (((pushbutton_mode & 0x02) == TRUE) &&  //goes to set clock time mode if of the
+	    ((pushbutton_mode & 0x04) == FALSE)) { //mode buttons, only button 1 is pressed
+		//set clock time
+	} else if (((pushbutton_mode & 0x04) == TRUE) &&
+		   ((pushbutton_mode & 0x02) == FALSE)) {
+		//set alarm time
+	} else {
+		if (check_1 == 0)
+			if (audio_volume < 0xFF)
+				audio_volume++;
+		if (check_1 == 1)
+			if (audio_volume > 0x00)
+				audio_volume--;
+	}
 }
 
 ///*****************************************************************************************
@@ -602,7 +604,6 @@ ISR(TIMER1_COMPA_vect)
 		//read_adc();
 		INT1_count = 0;
 	}
-	//OCR1A = 0xFF00;
 }
 
 /*****************************************************************************************
@@ -651,13 +652,12 @@ int main()
 	number = 0; //initialize number
 	
 	/* Initialization */
+	port_init(); //initialize remaining ports
 	TCNT0_init(); //initialize timer/counter 0
 	TCNT1_init(); //initialize timer/counter 1
 	TCNT2_init(); //initialize timer/counter 2
 	TCNT3_init(); //initialize timer/counter 3
-	led_display_init(); //initialize led display
 	SPI_init(); //initialize SPI master on PORTB 1-3
-	alarm_init(); //initialize alarm signal
 	lcd_init(); //initialize lcd 
 
 	/* enable interrupts */
