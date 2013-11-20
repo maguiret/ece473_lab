@@ -87,6 +87,7 @@ volatile uint8_t audio_volume;
 
 /* Global variable to hold current state of alarm */
 volatile uint8_t alarm_on = FALSE;
+volatile uint8_t alarm_old_state = TRUE;
 volatile uint8_t alarm_going = FALSE;
 
 /* Counters for various ISRs */
@@ -212,6 +213,7 @@ void SPI_init()
 	SPCR |= ((1 << SPE) |  //enables SPI
 		 (1 << MSTR));  //sets master SPI mode
 	SPSR |= (1 << SPI2X);  //sets a clock/2 prescalar
+	DDRF |= 0x08;  //port F bit 3 is enable for LCD
 }
 
 /*****************************************************************************************
@@ -655,6 +657,7 @@ ISR(TIMER1_COMPA_vect)
 		//clear_display();
 		//cursor_home();
 		//string2lcd("ALARM OFF");
+/*		Start pseudocoding here for when to update display */
 		//read_adc();
 		INT1_count = 0;
 	}
@@ -716,10 +719,6 @@ int main()
 
 	/* enable interrupts */
 	sei();
-
-	clear_display();
-	cursor_home();
-	string2lcd("TEST");
 
 	while (1) {
 		display_digits();
