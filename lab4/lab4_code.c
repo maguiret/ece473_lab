@@ -79,7 +79,7 @@ volatile uint16_t number;
 
 /* Global variable to hold number of seconds elapsed in the day */
 //volatile uint32_t seconds = 0;
-volatile uint32_t seconds = 0; //for testing alarm
+volatile uint32_t seconds = 50; //for testing alarm
 
 /* Global variable to hold alarm time in seconds */
 volatile uint32_t alarm_time = 0;
@@ -91,6 +91,8 @@ volatile uint8_t audio_volume;
 volatile uint8_t alarm_on = FALSE;
 volatile uint8_t alarm_state_changed = TRUE;
 volatile uint8_t alarm_going = FALSE;
+volatile uint8_t alarm_toggle = 0;
+volatile uint8_t snooze_state = FALSE;
 volatile uint8_t snoozes = 0;
 
 /* Counters for various ISRs */
@@ -233,6 +235,7 @@ void port_init()
 
 	/* Initialize the alarm bit */
 	DDRD |= 0x04;
+	PORTD &= ~(0x04);
 
 	/* Initialize the volume bit */
 	DDRE |= 0x08;
@@ -282,6 +285,7 @@ void button_mode_toggle(uint8_t button)
 	} else if (button == 7) { //snooze
 		if (alarm_going == TRUE) {
 			alarm_going = FALSE;
+			snooze_state = TRUE;
 			alarm_time = (alarm_time + SNOOZE_TIME) % SECONDS_MAX; //10 second snooze
 			snoozes++;
 		}
@@ -520,75 +524,6 @@ void check_encoders()
 	}
 }
 
-///*****************************************************************************************
-// * Function:		Interrupt Service Routine for Timer/Counter 0
-// * Description:		Timer runs in asynchronous mode off of crystal oscillator. On
-// * 			 overflow, a counter is incremented. When the counter reaches 128,
-// * 			 a second of time has passed, and the seconds variable is
-// * 			 incremented and the counter is set to zero. If seconds has
-// * 			 reached the end of a day, it is also reset to zero. The buttons
-// * 			 are read every interrupt.
-// * Arguments:		None
-// * Return:		None
-// ****************************************************************************************/
-//ISR(TIMER0_OVF_vect)
-//{
-//	uint8_t old_PORTA = PORTA;
-//	uint8_t old_PORTB = PORTB;
-//	uint8_t old_DDRA = DDRA;
-//
-//	read_buttons();
-//
-//	PORTA = old_PORTA;
-//	PORTB = old_PORTB;
-//	DDRA = old_DDRA;
-//	DELAY_CLK;
-//
-//	/* Sets the counter step size based on button mode
-//	 * steps by 1 (default) if neither pressed
-//	 * steps by 2 if button 1 pressed
-//	 * steps by 4 if button 2 pressed
-//	 * doesn't count if both pressed */
-//	if (pushbutton_mode == 0x00)
-//		step_size = 0x01;
-//	else if (pushbutton_mode == 0x01)
-//		step_size = 0x02;
-//	else if (pushbutton_mode == 0x02)
-//		step_size = 0x04;
-//	else if (pushbutton_mode == 0x03)
-//		step_size = 0x00;
-//
-//	/* Sets leds on bar graph display */
-//	SPDR = pushbutton_mode; //sets value of SPI data register to mode value
-//	while(bit_is_clear(SPSR, SPIF)); //waits for serial transmission to complete
-//	PORTB |= 0x70;
-//	PORTB &= 0xEF; //toggle bar graph regclk
-//	PORTB |= 0x10;
-//
-//	/* Check both encoders for rotation */
-//	PORTB |= 0x01; //toggle shift load on encoder board
-//	SPDR = 0x00; //write a zero for filler purposes
-//	while(bit_is_clear(SPSR, SPIF)); //wait for write to finish
-//	PORTB &= 0xFE; //clear shift load bit on encoder board
-//
-//	uint8_t check_1 = read_encoder(1);
-//	uint8_t check_2 = read_encoder(2);
-//
-//	/* If a clockwise turn was made, increment count */
-//	if (check_1 == 0 || check_2 == 0)
-//		number += step_size;
-//
-//	/* If a counterclockwise turn was made, decrement count */
-//	if (check_1 == 1 || check_2 == 1)
-//		number -= step_size;
-//
-//	/* Ensure number is always between 0 and COUNT_MAX */
-//	number %= COUNT_MAX + 1;
-//
-//	PORTB = old_PORTB;
-//	DELAY_CLK;
-//}
-
 /*****************************************************************************************
  * Function:		Interrupt Service Routine for Timer/Counter 0
  * Description:		Timer runs in asynchronous mode off of crystal oscillator. On
@@ -614,22 +549,17 @@ ISR(TIMER0_OVF_vect)
 		seconds++;
 		if ((seconds == alarm_time) && (alarm_on == TRUE)) {
 			alarm_going = TRUE;
+			snooze_state = FALSE;
 		}
+		if ((alarm_on == TRUE) && (alarm_going == TRUE))
+			DDRD ^= 0x04;
+		else
+			DDRD &= ~(0x04);
 		if (seconds == SECONDS_MAX)
 			seconds = 0;
 		colon_state ^= 0x01; //toggle state of colon
 		INT0_count = 0;
 	}
-
-	//if (pwm_dir == 1)
-	//	OCR2++;
-	//else
-	//	OCR2--;
-
-	//if (OCR2 == 0)
-	//	pwm_dir = 1;
-	//else if (OCR2 == 255)
-	//	pwm_dir = 0;
 
 	read_buttons();
 
@@ -654,10 +584,14 @@ ISR(TIMER1_COMPA_vect)
 	//	PORTD |= 0x04; //toggle alarm signal bit on
 	//else
 	//	PORTD &= ~(0x04); //turn alarm bit off
-	if ((alarm_going == TRUE) && (alarm_on == TRUE))
-		OCR2 = 0x00;
-	else
-		OCR2 = 0x7F;
+	if ((alarm_going == TRUE) && (alarm_on == TRUE)) {
+		//OCR2 = 0x00;
+		if ((INT1_count % 2) == 0)
+			PORTD ^= 0x04; //toggle alarm signal bit
+	} else {
+		//OCR2 = 0x7F;
+		PORTD &= ~(0x04); //hold bit low if not alarm
+	}
 	if (INT1_count == 128) {
 		/* Updates alarm state on display only if state has changed */
 		if ((alarm_state_changed == TRUE) && (alarm_on == TRUE)) {
