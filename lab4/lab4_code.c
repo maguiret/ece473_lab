@@ -230,10 +230,15 @@ void SPI_init()
  ****************************************************************************************/
 void adc_init()
 {
+
 	DDRF &= 0x7F; //bit 7 is input
 	PORTF = 0x80;
-	ADMUX = 0x47;
-	ADCSRA = 0x97;
+	ADMUX |= ((1 << REFS0) | //sets vref to vcc
+		  (1 << ADLAR) | //sets most significant bits to ADCH
+		  (1 << MUX2) | (1 << MUX1) | (1 << MUX0)); //sets portf bit 7 as ADC in
+	ADCSRA = ((1 << ADEN) | //enables adc
+		  (1 << ADIF) | //sets interrupt flag
+		  (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0)); //128 prescalar
 }
 
 /*****************************************************************************************
@@ -421,10 +426,18 @@ void display_digits()
  ****************************************************************************************/
 void read_adc()
 {
+	uint8_t adc_result;
+
 	ADCSRA |= (1 << ADSC);
 	while(bit_is_clear(ADCSRA, ADIF));
 	ADCSRA |= (1 << ADIF);
-	OCR2 = ADCL;
+
+	adc_result = ADCH;
+	adc_result = ((adc_result - 0xD4) * 6);
+	if (adc_result < 0x10)
+		adc_result = 0x10;
+
+	OCR2 = adc_result;
 }
 
 /*****************************************************************************************
