@@ -94,6 +94,9 @@ volatile uint8_t alarm_going = FALSE;
 volatile uint8_t alarm_toggle = 0;
 volatile uint8_t snooze_state = FALSE;
 volatile uint8_t snoozes = 0;
+volatile char alarm_on_string[16] = "ALARM ON";
+volatile char alarm_off_string[16] = "ALARM OFF";
+volatile uint8_t writing_string = FALSE;
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
@@ -104,7 +107,8 @@ volatile uint16_t INT3_count = 0;
 volatile uint8_t colon_state = 0;
 
 /* Global variable to hold mode determined by push buttons */
-volatile uint8_t pushbutton_mode = 0x00;
+//volatile uint8_t pushbutton_mode = 0x00;
+volatile uint8_t pushbutton_mode = 0x07;
 
 /* Sets the step size for the encoder counter */
 volatile uint8_t step_size = 1;
@@ -433,7 +437,7 @@ void read_adc()
 	ADCSRA |= (1 << ADIF);
 
 	adc_result = ADCH;
-	adc_result = ((adc_result - 0xD4) * 6);
+	adc_result = ((adc_result - 0xDC) * 5);
 	if (adc_result < 0x10)
 		adc_result = 0x10;
 
@@ -634,6 +638,10 @@ ISR(TIMER1_COMPA_vect)
 		//OCR2 = 0x7F;
 		PORTD &= ~(0x04); //hold bit low if not alarm
 	}
+
+	if (!(INT1_count % 64))
+		read_adc();
+
 	if (INT1_count == 128) {
 		/* Updates alarm state on display only if state has changed */
 		if ((alarm_state_changed == TRUE) && (alarm_on == TRUE)) {
@@ -645,7 +653,6 @@ ISR(TIMER1_COMPA_vect)
 			string2lcd("ALARM OFF");
 			alarm_state_changed = FALSE;
 		}
-		read_adc();
 		INT1_count = 0;
 	}
 }
