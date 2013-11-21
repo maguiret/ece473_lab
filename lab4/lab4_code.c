@@ -78,8 +78,7 @@
 volatile uint16_t number;
 
 /* Global variable to hold number of seconds elapsed in the day */
-//volatile uint32_t seconds = 0;
-volatile uint32_t seconds = 50; //for testing alarm
+volatile uint32_t seconds = 0;
 
 /* Global variable to hold alarm time in seconds */
 volatile uint32_t alarm_time = 0;
@@ -94,9 +93,13 @@ volatile uint8_t alarm_going = FALSE;
 volatile uint8_t alarm_toggle = 0;
 volatile uint8_t snooze_state = FALSE;
 volatile uint8_t snoozes = 0;
-volatile char alarm_on_string[16] = "ALARM ON";
-volatile char alarm_off_string[16] = "ALARM OFF";
-volatile uint8_t writing_string = FALSE;
+volatile char alarm_on_str[16] = "ALARM ON";
+volatile char alarm_off_str[16] = "ALARM OFF";
+volatile int str_wr_cnt = -1;
+
+/* Variables for adc stuff */
+static uint8_t adc_result = 0x7F; //value not important
+static uint8_t result_old;
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
@@ -107,8 +110,7 @@ volatile uint16_t INT3_count = 0;
 volatile uint8_t colon_state = 0;
 
 /* Global variable to hold mode determined by push buttons */
-//volatile uint8_t pushbutton_mode = 0x00;
-volatile uint8_t pushbutton_mode = 0x07;
+volatile uint8_t pushbutton_mode = 0x00;
 
 /* Sets the step size for the encoder counter */
 volatile uint8_t step_size = 1;
@@ -299,19 +301,19 @@ void button_mode_toggle(uint8_t button)
 	 	pushbutton_mode  ^= 0x04; //toggle third bit
 	} else if (button == 3) { //alarm armed
 		pushbutton_mode ^= 0x08; //toggle fourth bit
-		alarm_on ^= 1;
-		alarm_state_changed = TRUE;
-		if (alarm_going == TRUE) {
-			alarm_going = FALSE;
-			alarm_time -= (snoozes * SNOOZE_TIME);
-			snoozes = 0;
+		alarm_on ^= 1; //toggles alarm state
+		alarm_state_changed = TRUE; //sends state change flag
+		if (alarm_going == TRUE) { //if alarm is going off
+			alarm_going = FALSE; //turn alarm off
+			alarm_time -= (snoozes * SNOOZE_TIME); //remove added snooze time
+			snoozes = 0; //reset snooze count for next time
 		}
 	} else if (button == 7) { //snooze
-		if (alarm_going == TRUE) {
-			alarm_going = FALSE;
-			snooze_state = TRUE;
+		if (alarm_going == TRUE) { //alarm is going off
+			alarm_going = FALSE; //turn off
+			snooze_state = TRUE; //in snooze
 			alarm_time = (alarm_time + SNOOZE_TIME) % SECONDS_MAX; //10 second snooze
-			snoozes++;
+			snoozes++; //increment snooze counter
 		}
 	}
 }
@@ -348,7 +350,7 @@ void display_digits()
 	    !(pushbutton_mode & 0x02))  //active
 		tmp_sec = alarm_time;
 	else
-		tmp_sec = seconds;
+		tmp_sec = seconds; //displays time otherwise
 	uint8_t cur_value; //current digit value to display
 	uint8_t cur_digit = 0; //current digit to display on
 	uint8_t colon;
@@ -430,17 +432,24 @@ void display_digits()
  ****************************************************************************************/
 void read_adc()
 {
-	uint8_t adc_result;
+	result_old = adc_result; //sets "old" value to value read in last call
 
-	ADCSRA |= (1 << ADSC);
-	while(bit_is_clear(ADCSRA, ADIF));
-	ADCSRA |= (1 << ADIF);
+	ADCSRA |= (1 << ADSC); //start conversion
+	while(bit_is_clear(ADCSRA, ADIF)); //wait for flag
+	ADCSRA |= (1 << ADIF); //clear flag when done
 
+	/* Take result and convert to proper number for dimming */
 	adc_result = ADCH;
-	adc_result = ((adc_result - 0xDC) * 5);
-	if (adc_result < 0x10)
-		adc_result = 0x10;
+	adc_result = ((adc_result - 0xDC) * 6);
+	adc_result += 30;
+	
+	/* Makes sure the value doesn't underflow */
+	if ((adc_result < 0x0A) && (result_old >= 0x0A)) {
+		adc_result = 0x0A;
+		result_old = 0x0B;
+	}
 
+	/* Set timer 2 duty cycle */
 	OCR2 = adc_result;
 }
 
@@ -530,37 +539,60 @@ void check_encoders()
 	uint8_t check_1 = read_encoder(1);
 	uint8_t check_2 = read_encoder(2);
 
-	//if (check_1 == 0 || check_2 == 0)
-	//	seconds += 60;
-	//else if (check_1 == 1 || check_2 == 1)
-	//	seconds -= 60;
-	
 	/* Process the encoder reads based on active setting */
 	if ((pushbutton_mode & 0x02) &&  //goes to set clock time mode if of the
 	    !(pushbutton_mode & 0x04)) { //mode buttons, only button 1 is pressed
-		if (check_1 == 0 || check_2 == 0) {
+
+		/* If left encoder turned, modify hours */
+		if (check_1 == 0) {
+			seconds += 3600;
+			if (seconds >= SECONDS_MAX)
+				seconds = 0;
+		}
+		if (check_1 == 1) {
+			seconds -= 3600;
+			if (seconds > SECONDS_MAX)
+				seconds = SECONDS_MAX-3600;
+		}
+
+		/* If right encoder turned, modify minutes */
+		if (check_2 == 0) {
 			seconds += 60;
 			if (seconds >= SECONDS_MAX)
 				seconds = 0;
 		}
-		if (check_1 == 1 || check_2 == 1) {
+		if (check_2 == 1) {
 			seconds -= 60;
 			if (seconds > SECONDS_MAX)
 				seconds = SECONDS_MAX-60;
 		}
 	} else if ((pushbutton_mode & 0x04) &&  //goes to set alarm time mode if
 		   !(pushbutton_mode & 0x02)) { //only button 2 is pressed
-		if (check_1 == 0 || check_2 == 0) {
+
+		/* If left encoder turned, modify hours */
+		if (check_1 == 0) {
+			alarm_time += 3600;
+			if (alarm_time >= SECONDS_MAX)
+				alarm_time = 0;
+		}
+		if (check_1 == 1) {
+			alarm_time -= 3600;
+			if (alarm_time > SECONDS_MAX)
+				alarm_time = SECONDS_MAX-3600;
+		}
+
+		/* If right encoder turned, modify minutes */
+		if (check_2 == 0) {
 			alarm_time += 60;
 			if (alarm_time >= SECONDS_MAX)
 				alarm_time = 0;
 		}
-		if (check_1 == 1 || check_2 == 1) {
+		if (check_2 == 1) {
 			alarm_time -= 60;
 			if (alarm_time > SECONDS_MAX)
 				alarm_time = SECONDS_MAX-60;
 		}
-	} else {
+	} else { //otherwise, left encoder modifies audio volume (right will control fm frequency later)
 		if (check_1 == 0)
 			if (audio_volume < 0xFF)
 				audio_volume++;
@@ -591,19 +623,27 @@ ISR(TIMER0_OVF_vect)
 	static uint8_t pwm_dir = 1;
 
 	INT0_count++;
-	if (INT0_count == 128) {
-		seconds++;
+	if (INT0_count == 128) { //every 128 interrupts...
+		seconds++; //a seconds has passed
+
+		/* Handle alarm as need be */
 		if ((seconds == alarm_time) && (alarm_on == TRUE)) {
 			alarm_going = TRUE;
 			snooze_state = FALSE;
 		}
+
+		/* Make alarm beep on and off while going */
 		if ((alarm_on == TRUE) && (alarm_going == TRUE))
 			DDRD ^= 0x04;
 		else
 			DDRD &= ~(0x04);
+
+		/* Reset seconds at max time */
 		if (seconds == SECONDS_MAX)
 			seconds = 0;
-		colon_state ^= 0x01; //toggle state of colon
+
+		/* Toggle state of colon, reset interrupt count */
+		colon_state ^= 0x01; 
 		INT0_count = 0;
 	}
 
@@ -618,40 +658,55 @@ ISR(TIMER0_OVF_vect)
 
 /*****************************************************************************************
  * Function:		Interrupt Service Routine for Timer/Counter 1
- * Description:		
+ * Description:		ISR controls the 2kHz alarm signal, reads ADC, and updates the
+ * 			 status of the alarm on the LCD
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
 ISR(TIMER1_COMPA_vect)
 {
 	INT1_count++;
-	/* Controls alarm, flips bit if on, holds low if not */
-	//if ((alarm_on == TRUE) && ((INT1_count % 2) == 0))
-	//	PORTD |= 0x04; //toggle alarm signal bit on
-	//else
-	//	PORTD &= ~(0x04); //turn alarm bit off
+
+	/* If alarm in going state, toggle bit to generate 2kHz square wave */
 	if ((alarm_going == TRUE) && (alarm_on == TRUE)) {
-		//OCR2 = 0x00;
 		if ((INT1_count % 2) == 0)
 			PORTD ^= 0x04; //toggle alarm signal bit
 	} else {
-		//OCR2 = 0x7F;
 		PORTD &= ~(0x04); //hold bit low if not alarm
 	}
 
+	/* Read ADC every 64 interrupts */
 	if (!(INT1_count % 64))
 		read_adc();
 
 	if (INT1_count == 128) {
-		/* Updates alarm state on display only if state has changed */
+		/* Updates alarm state on display only if state has changed. Writes a
+		 * character at a time. */
 		if ((alarm_state_changed == TRUE) && (alarm_on == TRUE)) {
-			clear_display();
-			string2lcd("ALARM ON");
-			alarm_state_changed = FALSE;
+			if (str_wr_cnt == -1) {
+				clear_display();
+				str_wr_cnt++;
+			} else {
+				if (alarm_on_str[str_wr_cnt] != '\0') {
+					char2lcd(alarm_on_str[str_wr_cnt++]);
+				} else {
+					str_wr_cnt = -1;
+					alarm_state_changed = FALSE;
+				}
+			}
 		} else if ((alarm_state_changed == TRUE) && (alarm_on == FALSE)) {
-			clear_display();
-			string2lcd("ALARM OFF");
-			alarm_state_changed = FALSE;
+			if (str_wr_cnt == -1) {
+				clear_display();
+				str_wr_cnt++;
+			} else {
+				if (alarm_off_str[str_wr_cnt] != '\0') {
+					char2lcd(alarm_off_str[str_wr_cnt++]);
+				} else {
+					str_wr_cnt = -1;
+					alarm_state_changed = FALSE;
+				}
+			}
+
 		}
 		INT1_count = 0;
 	}
@@ -681,7 +736,11 @@ ISR(TIMER3_COMPA_vect)
 	uint8_t old_PORTB = PORTB;
 	
 	INT3_count++;	
+
+	/* Sample encoders fast */
 	check_encoders();
+
+	/* Clock bargraph and modify volume slow */
 	if (INT3_count == 512) {
 		clock_bargraph();
 		OCR3AL = audio_volume;

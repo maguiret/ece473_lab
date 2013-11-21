@@ -24,7 +24,7 @@ void clear_display(void){
 	SPDR = 0x01;    //clear display command
 	while (!(SPSR & 0x80)) {}	// Wait for SPI transfer to complete
 	strobe_lcd();   //strobe the LCD enable pin
-	_delay_ms(2);   //obligatory waiting for slow LCD
+	//_delay_ms(2);   //obligatory waiting for slow LCD
 }         
 
 void cursor_home(void){
@@ -65,7 +65,7 @@ void char2lcd(char a_char){
 	SPDR = a_char; //send the char to the SPI port
 	while (!(SPSR & 0x80)) {}	// Wait for SPI transfer to complete
 	strobe_lcd();  //toggle the enable bit
-	_delay_ms(1); //wait the prescribed time for the LCD to process
+	//_delay_ms(1); //wait the prescribed time for the LCD to process
 }
   
   
