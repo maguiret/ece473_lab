@@ -61,8 +61,9 @@
 #define SS PB0
 #define SCK PB1
 #define MOSI PB2
-//#define COUNT_MAX 1023
 #define SECONDS_MAX 86400
+//#define SNOOZE_TIME 600
+#define SNOOZE_TIME 10
 
 #define COLON_AM 0xFC
 #define COLON_PM 0xF8
@@ -77,7 +78,8 @@
 volatile uint16_t number;
 
 /* Global variable to hold number of seconds elapsed in the day */
-volatile uint32_t seconds = 0;
+//volatile uint32_t seconds = 0;
+volatile uint32_t seconds = 0; //for testing alarm
 
 /* Global variable to hold alarm time in seconds */
 volatile uint32_t alarm_time = 0;
@@ -87,8 +89,9 @@ volatile uint8_t audio_volume;
 
 /* Global variable to hold current state of alarm */
 volatile uint8_t alarm_on = FALSE;
-volatile uint8_t alarm_old_state = TRUE;
+volatile uint8_t alarm_state_changed = TRUE;
 volatile uint8_t alarm_going = FALSE;
+volatile uint8_t snoozes = 0;
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
@@ -263,7 +266,6 @@ void button_mode_toggle(uint8_t button)
 {
 	if (button == 0) { //am/pm
 		pushbutton_mode ^= 0x01; //toggle first bit
-		//twelve_hr ^= 0x01; //toggle 12 hour mode
 	} else if (button == 1) { //clock set
 	 	pushbutton_mode  ^= 0x02; //toggle second bit
 	} else if (button == 2) { //alarm set
@@ -271,13 +273,17 @@ void button_mode_toggle(uint8_t button)
 	} else if (button == 3) { //alarm armed
 		pushbutton_mode ^= 0x08; //toggle fourth bit
 		alarm_on ^= 1;
-		if (alarm_going == TRUE)
+		alarm_state_changed = TRUE;
+		if (alarm_going == TRUE) {
 			alarm_going = FALSE;
+			alarm_time -= (snoozes * SNOOZE_TIME);
+			snoozes = 0;
+		}
 	} else if (button == 7) { //snooze
 		if (alarm_going == TRUE) {
 			alarm_going = FALSE;
-			//alarm_time = (alarm_time + 600) % SECONDS_MAX; //10 minute snooze
-			alarm_time = (alarm_time + 10) % SECONDS_MAX; //10 second snooze
+			alarm_time = (alarm_time + SNOOZE_TIME) % SECONDS_MAX; //10 second snooze
+			snoozes++;
 		}
 	}
 }
@@ -606,8 +612,7 @@ ISR(TIMER0_OVF_vect)
 	INT0_count++;
 	if (INT0_count == 128) {
 		seconds++;
-		if (seconds == alarm_time) {
-			alarm_on = TRUE;
+		if ((seconds == alarm_time) && (alarm_on == TRUE)) {
 			alarm_going = TRUE;
 		}
 		if (seconds == SECONDS_MAX)
@@ -649,15 +654,21 @@ ISR(TIMER1_COMPA_vect)
 	//	PORTD |= 0x04; //toggle alarm signal bit on
 	//else
 	//	PORTD &= ~(0x04); //turn alarm bit off
-	if (alarm_going == TRUE)
+	if ((alarm_going == TRUE) && (alarm_on == TRUE))
 		OCR2 = 0x00;
 	else
 		OCR2 = 0x7F;
 	if (INT1_count == 128) {
-		//clear_display();
-		//cursor_home();
-		//string2lcd("ALARM OFF");
-/*		Start pseudocoding here for when to update display */
+		/* Updates alarm state on display only if state has changed */
+		if ((alarm_state_changed == TRUE) && (alarm_on == TRUE)) {
+			clear_display();
+			string2lcd("ALARM ON");
+			alarm_state_changed = FALSE;
+		} else if ((alarm_state_changed == TRUE) && (alarm_on == FALSE)) {
+			clear_display();
+			string2lcd("ALARM OFF");
+			alarm_state_changed = FALSE;
+		}
 		//read_adc();
 		INT1_count = 0;
 	}
