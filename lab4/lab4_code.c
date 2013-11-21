@@ -219,6 +219,21 @@ void SPI_init()
 		 (1 << MSTR));  //sets master SPI mode
 	SPSR |= (1 << SPI2X);  //sets a clock/2 prescalar
 	DDRF |= 0x08;  //port F bit 3 is enable for LCD
+	PORTF &= 0xF7;  //port F bit 3 is initially low
+}
+
+/*****************************************************************************************
+ * Function:		adc_init
+ * Description:		Initializes the ADC 
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void adc_init()
+{
+	DDRF &= 0x7F; //bit 7 is input
+	PORTF = 0x80;
+	ADMUX = 0x47;
+	ADCSRA = 0x97;
 }
 
 /*****************************************************************************************
@@ -396,6 +411,20 @@ void display_digits()
 
 		_delay_loop_1(200); //delay for about arg*3 cycles
 	}
+}
+
+/*****************************************************************************************
+ * Function:		read_adc
+ * Description:		Reads value from ADC, adjusts brightness PWM
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void read_adc()
+{
+	ADCSRA |= (1 << ADSC);
+	while(bit_is_clear(ADCSRA, ADIF));
+	ADCSRA |= (1 << ADIF);
+	OCR2 = ADCL;
 }
 
 /*****************************************************************************************
@@ -603,7 +632,7 @@ ISR(TIMER1_COMPA_vect)
 			string2lcd("ALARM OFF");
 			alarm_state_changed = FALSE;
 		}
-		//read_adc();
+		read_adc();
 		INT1_count = 0;
 	}
 }
@@ -657,6 +686,7 @@ int main()
 	port_init(); //initialize remaining ports
 	SPI_init(); //initialize SPI master on PORTB 1-3
 	lcd_init(); //initialize lcd 
+	adc_init(); //initialize adc
 	TCNT0_init(); //initialize timer/counter 0
 	TCNT1_init(); //initialize timer/counter 1
 	TCNT2_init(); //initialize timer/counter 2
