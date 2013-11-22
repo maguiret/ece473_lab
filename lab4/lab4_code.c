@@ -74,6 +74,7 @@
 /* 2 cycle delay */
 #define DELAY_CLK do{asm("nop");asm("nop");}while(0)
 
+
 /* Global variable to hold current displayed number */
 volatile uint16_t number;
 
@@ -207,7 +208,7 @@ void TCNT3_init()
 	TCCR3B |= ((1 << WGM32) | //set fast PWM 8 bit mode
 		   (1 << CS31)); //8 prescaler
 	OCR3AL = 0x7F; //Initialize at 50% duty cycle, only low is used for 8 bit PWM
-	audio_volume = 0x7F; //Stores value to audio volume variable
+	audio_volume = 0x50; //Stores value to audio volume variable
 }
 
 /*****************************************************************************************
@@ -594,7 +595,7 @@ void check_encoders()
 		}
 	} else { //otherwise, left encoder modifies audio volume (right will control fm frequency later)
 		if (check_1 == 0)
-			if (audio_volume < 0xFF)
+			if (audio_volume < 0xA0)
 				audio_volume++;
 		if (check_1 == 1)
 			if (audio_volume > 0x00)
