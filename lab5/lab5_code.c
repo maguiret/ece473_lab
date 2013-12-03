@@ -58,12 +58,15 @@
  *****************************************************************************************
  */
 
+#define F_CPU 16000000 // cpu speed in hertz 
+
 #include <avr/io.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
+#include <util/twi.h>
 #include "lcd_functions.h"
-
-#define F_CPU 16000000 // cpu speed in hertz 
+#include "lm73_functions.h"
+#include "twi_master.h"
 
 #define SS PB0
 #define SCK PB1
@@ -77,6 +80,10 @@
 
 #define TRUE 1
 #define FALSE 0
+
+/* Defines for farenheit and celcius */
+#define F 1
+#define C 0
 
 /* 2 cycle delay */
 #define DELAY_CLK do{asm("nop");asm("nop");}while(0)
@@ -108,6 +115,13 @@ volatile int str_wr_cnt = 0;
 /* Variables for adc stuff */
 static uint8_t adc_result = 0x7F; //value not important
 static uint8_t result_old;
+
+/* Variables for temp sensor stuff */
+volatile char lcd_temp_string[3];
+volatile uint16_t lm73_temp;
+volatile extern uint8_t lm73_rd_buf[2];
+volatile extern uint8_t lm73_wr_buf[2];
+volatile uint8_t temp_changed = FALSE;
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
@@ -234,6 +248,20 @@ void SPI_init()
 	SPSR |= (1 << SPI2X);  //sets a clock/2 prescalar
 	DDRF |= 0x08;  //port F bit 3 is enable for LCD
 	PORTF &= 0xF7;  //port F bit 3 is initially low
+}
+
+/*****************************************************************************************
+ * Function:		lm73_init
+ * Description:		Initializes local temp sensor over twi
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void lm73_init()
+{
+	lm73_wr_buf[0] = LM73_PTR_TEMP;
+
+	twi_start_wr(LM73_ADDRESS, lm73_wr_buf, 1);
+	_delay_ms(2);
 }
 
 /*****************************************************************************************
@@ -489,6 +517,26 @@ void read_buttons()
 }
 
 /*****************************************************************************************
+ * Function:		read_lm73
+ * Description:		Function reads temperature data from sensor over twi and converts
+ * 			 farenhiet or celsius basec on 3rd argument to lm73_temp_convert
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void read_lm73()
+{
+	twi_start_rd(LM73_ADDRESS, lm73_rd_buf, 1);
+	_delay_ms(2);
+
+	lm73_temp = lm73_rd_buf[0];
+
+	lm73_temp <<= 8;
+	lm73_temp |= lm73_rd_buf[1];
+
+	lm73_temp_convert(lcd_temp_string, lm73_temp, C);
+}
+
+/*****************************************************************************************
  * Function:		read_encoder
  * Description:		Checks current state of encoder, compares against previous state
  * 			 to determine whether encoder is being turned clockwise or
@@ -611,14 +659,14 @@ void check_encoders()
 }
 
 /*****************************************************************************************
- * Function:		write_alarm_state_lcd
- * Description:		Function updates the alarm state on line one of the lcd if the
- * 			 line needs updating.
+ * Function:		write_lcd
+ * Description:		Function updates the lcd
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
-void write_alarm_state_lcd()
+void write_lcd()
 {
+	/* Handles line 1 (alarm state) */
 	if ((alarm_state_changed == TRUE) && (alarm_on == TRUE)) {
 		if (str_wr_cnt == 0) 
 			cursor_home();
@@ -640,6 +688,11 @@ void write_alarm_state_lcd()
 			str_wr_cnt = 0;
 			alarm_state_changed = FALSE;
 		}
+	/* Handles line 2 (temperature) */
+	} else if ((temp_changed == TRUE) && (alarm_going == FALSE)) {
+		home_line2();
+		string2lcd(lcd_temp_string);
+		temp_changed = FALSE;
 	}
 }
 
@@ -686,6 +739,10 @@ ISR(TIMER0_OVF_vect)
 		/* Toggle state of colon, reset interrupt count */
 		colon_state ^= 0x01; 
 		INT0_count = 0;
+
+		/* Read temperature */
+		read_lm73();
+		temp_changed = TRUE;
 	}
 
 	read_buttons();
@@ -721,7 +778,7 @@ ISR(TIMER1_COMPA_vect)
 		read_adc();
 
 	if (INT1_count == 128) {
-		write_alarm_state_lcd();
+		write_lcd();
 		INT1_count = 0;
 	}
 }
@@ -779,6 +836,8 @@ int main()
 	SPI_init(); //initialize SPI master on PORTB 1-3
 	lcd_init(); //initialize lcd 
 	adc_init(); //initialize adc
+	init_twi(); //initialize I2C interface
+	lm73_init(); //initialize temperature sensor
 	TCNT0_init(); //initialize timer/counter 0
 	TCNT1_init(); //initialize timer/counter 1
 	TCNT2_init(); //initialize timer/counter 2
