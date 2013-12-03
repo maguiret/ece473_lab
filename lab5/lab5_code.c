@@ -48,6 +48,13 @@
  *     7: Press for snooze
  * 
  * - Volume output pin is PE3
+ * - ADC input pin is PF7
+ * - Alarm signal output pin is PD2
+ *****************************************************************************************
+ *
+ ****************************LAB 4 SPECIFICS**********************************************
+ * - Temp sensor SCK connected to PD0
+ * - Temp sensor SDA connected to PD1
  *****************************************************************************************
  */
 
@@ -94,9 +101,9 @@ volatile uint8_t alarm_going = FALSE;
 volatile uint8_t alarm_toggle = 0;
 volatile uint8_t snooze_state = FALSE;
 volatile uint8_t snoozes = 0;
-volatile char alarm_on_str[16] = "ALARM ON";
-volatile char alarm_off_str[16] = "ALARM OFF";
-volatile int str_wr_cnt = -1;
+volatile char *alarm_on_str  = "ALARM ON        ";
+volatile char *alarm_off_str = "ALARM OFF       ";
+volatile int str_wr_cnt = 0;
 
 /* Variables for adc stuff */
 static uint8_t adc_result = 0x7F; //value not important
@@ -604,6 +611,39 @@ void check_encoders()
 }
 
 /*****************************************************************************************
+ * Function:		write_alarm_state_lcd
+ * Description:		Function updates the alarm state on line one of the lcd if the
+ * 			 line needs updating.
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void write_alarm_state_lcd()
+{
+	if ((alarm_state_changed == TRUE) && (alarm_on == TRUE)) {
+		if (str_wr_cnt == 0) 
+			cursor_home();
+
+		/* Write a character of the 16 char string at a time */
+		if (alarm_on_str[str_wr_cnt] != '\0') {
+			char2lcd(alarm_on_str[str_wr_cnt++]);
+		} else { //write finished, reset character counter
+			str_wr_cnt = 0;
+			alarm_state_changed = FALSE;
+		}
+	} else if ((alarm_state_changed == TRUE) && (alarm_on == FALSE)) {
+		if (str_wr_cnt == 0) 
+			cursor_home();
+
+		if (alarm_off_str[str_wr_cnt] != '\0') {
+			char2lcd(alarm_off_str[str_wr_cnt++]);
+		} else {
+			str_wr_cnt = 0;
+			alarm_state_changed = FALSE;
+		}
+	}
+}
+
+/*****************************************************************************************
  * Function:		Interrupt Service Routine for Timer/Counter 0
  * Description:		Timer runs in asynchronous mode off of crystal oscillator. On
  * 			 overflow, a counter is incremented. When the counter reaches 128,
@@ -681,34 +721,7 @@ ISR(TIMER1_COMPA_vect)
 		read_adc();
 
 	if (INT1_count == 128) {
-		/* Updates alarm state on display only if state has changed. Writes a
-		 * character at a time. */
-		if ((alarm_state_changed == TRUE) && (alarm_on == TRUE)) {
-			if (str_wr_cnt == -1) {
-				clear_display();
-				str_wr_cnt++;
-			} else {
-				if (alarm_on_str[str_wr_cnt] != '\0') {
-					char2lcd(alarm_on_str[str_wr_cnt++]);
-				} else {
-					str_wr_cnt = -1;
-					alarm_state_changed = FALSE;
-				}
-			}
-		} else if ((alarm_state_changed == TRUE) && (alarm_on == FALSE)) {
-			if (str_wr_cnt == -1) {
-				clear_display();
-				str_wr_cnt++;
-			} else {
-				if (alarm_off_str[str_wr_cnt] != '\0') {
-					char2lcd(alarm_off_str[str_wr_cnt++]);
-				} else {
-					str_wr_cnt = -1;
-					alarm_state_changed = FALSE;
-				}
-			}
-
-		}
+		write_alarm_state_lcd();
 		INT1_count = 0;
 	}
 }
@@ -756,8 +769,7 @@ ISR(TIMER3_COMPA_vect)
 
 /*****************************************************************************************
  ********************************* MAIN FUNCTION *****************************************
- *****************************************************************************************
- */
+ ****************************************************************************************/
 int main()
 {
 	number = 0; //initialize number
