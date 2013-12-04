@@ -3,6 +3,10 @@
 //For controlling the UART and sending debug data to a terminal
 //as an aid in debugging.
 
+#ifndef F_CPU
+#define F_CPU 16000000 // cpu speed in hertz 
+#endif
+
 #include <avr/io.h>
 #include <stdlib.h>
 #include <avr/pgmspace.h>

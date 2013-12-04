@@ -9,7 +9,9 @@ PROGRAMMER_TARGET = M128
 OPTIMIZE       = -O2    # options are 1, 2, 3, s
 CC             = avr-gcc
 
-override CFLAGS        = -g -Wall $(OPTIMIZE) -mmcu=$(MCU_TARGET) $(DEFS)
+CPU_SPEED = 16000000UL
+
+override CFLAGS        = -g -Wall $(OPTIMIZE) -mmcu=$(MCU_TARGET) $(DEFS) -DF_CPU=$(CPU_SPEED)
 override LDFLAGS       = -Wl,-Map,$(PRG).map
 
 OBJCOPY        = avr-objcopy
