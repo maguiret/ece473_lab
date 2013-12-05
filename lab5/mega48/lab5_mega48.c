@@ -80,10 +80,10 @@ int main()
 	uart_init();
 
 	while (1) {
-		for (cnt = 0; cnt < 10; cnt++)
-			_delay_ms(100);
 		read_lm73();
 		while (uart_temp_string[strcnt] != '\0') 
 			uart_putc(uart_temp_string[strcnt++]);
+		for (cnt = 0; cnt < 10; cnt++)
+			_delay_ms(100);
 	}
 }

@@ -123,8 +123,12 @@ volatile char *lcd_temp_string = "L:   C    R: xxC";
 volatile uint16_t lm73_temp;
 volatile extern uint8_t lm73_rd_buf[2];
 volatile extern uint8_t lm73_wr_buf[2];
-volatile uint8_t temp_changed = FALSE;
-volatile uint8_t temp_wr_cnt = 0;
+volatile uint8_t local_temp_changed = FALSE;
+volatile uint8_t remote_temp_changed = FALSE;
+volatile uint8_t local_wr_cnt = 0;
+volatile uint8_t rem_wr_cnt = 0;
+
+volatile char read_uart_string[2];
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
@@ -706,16 +710,41 @@ void write_lcd()
 			alarm_state_changed = FALSE;
 		}
 	/* Handles line 2 (temperature) */
-	} else if ((temp_changed == TRUE) && (alarm_going == FALSE)) {
-		if (temp_wr_cnt == 0)
+	} else if ((local_temp_changed == TRUE) && (alarm_going == FALSE)) {
+		if (local_wr_cnt == 0)
 			home_line2();
-		if (lcd_temp_string[temp_wr_cnt] != '\0') {
-			char2lcd(lcd_temp_string[temp_wr_cnt++]);
+		if (lcd_temp_string[local_wr_cnt] != '\0') {
+			char2lcd(lcd_temp_string[local_wr_cnt++]);
 		} else { //write finished, reset character counter
-			temp_wr_cnt = 0;
-			temp_changed = FALSE;
+			local_wr_cnt = 0;
+			local_temp_changed = FALSE;
+		}
+	} else if ((remote_temp_changed == TRUE) && (alarm_going == FALSE)) {
+		if (rem_wr_cnt == 0)
+			home_line2();
+		if (lcd_temp_string[rem_wr_cnt] != '\0') {
+			char2lcd(lcd_temp_string[rem_wr_cnt++]);
+		} else { //write finished, reset character counter
+			rem_wr_cnt = 0;
+			local_temp_changed = FALSE;
 		}
 	}
+}
+
+/*****************************************************************************************
+ * Function:		read_uart
+ * Description:		Function reads remote temperature data over serial uart
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void read_uart() 
+{
+	while (bit_is_clear(UCSR0A,RXC0));
+	//read_uart_string[0] = uart_getc();
+	lcd_temp_string[13] = uart_getc();
+	while (bit_is_clear(UCSR0A,RXC0));
+	//read_uart_string[1] = uart_getc();
+	lcd_temp_string[14] = uart_getc();
 }
 
 /*****************************************************************************************
@@ -763,8 +792,15 @@ ISR(TIMER0_OVF_vect)
 		INT0_count = 0;
 
 		/* Read temperature */
-		read_lm73();
-		temp_changed = TRUE;
+		if (seconds > 5) {
+			if (seconds & 0xFFFFFFFE) {
+				read_lm73();
+				local_temp_changed = TRUE;
+			} else {
+				read_uart();
+				remote_temp_changed = TRUE;
+			}
+		}
 	}
 
 	read_buttons();
