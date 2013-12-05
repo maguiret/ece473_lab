@@ -113,8 +113,9 @@ volatile char *alarm_off_str = "ALARM OFF       ";
 volatile int str_wr_cnt = 0;
 
 /* Variables for adc stuff */
-static uint8_t adc_result = 0x7F; //value not important
-static uint8_t result_old;
+volatile uint8_t adc_result = 0x7F; //value not important
+volatile uint8_t result_old;
+volatile uint8_t adc_bound_reached = FALSE;
 
 /* Variables for temp sensor stuff */
 volatile char lcd_temp_string[3];
@@ -468,8 +469,6 @@ void display_digits()
  ****************************************************************************************/
 void read_adc()
 {
-	result_old = adc_result; //sets "old" value to value read in last call
-
 	ADCSRA |= (1 << ADSC); //start conversion
 	while(bit_is_clear(ADCSRA, ADIF)); //wait for flag
 	ADCSRA |= (1 << ADIF); //clear flag when done
@@ -477,16 +476,22 @@ void read_adc()
 	/* Take result and convert to proper number for dimming */
 	adc_result = ADCH;
 	adc_result = ((adc_result - 0xDC) * 6);
-	adc_result += 30;
 	
-	/* Makes sure the value doesn't underflow */
-	if ((adc_result < 0x0A) && (result_old >= 0x0A)) {
-		adc_result = 0x0A;
-		result_old = 0x0B;
+	if (adc_bound_reached == FALSE) {
+		/* Bound the range to prevent underflow/overflow */
+		if (adc_result < 0x0A) {
+			OCR2 = 0x0A;
+			adc_bound_reached = TRUE;
+		} else if (adc_result > 0xF5) {
+			OCR2 = 0xF5;
+			adc_bound_reached = TRUE;
+		} else {
+			OCR2 = adc_result;
+		}
+	} else {
+		if ((adc_result >= 0x0A) && (adc_result <= 0x32))
+			adc_bound_reached = FALSE;
 	}
-
-	/* Set timer 2 duty cycle */
-	OCR2 = adc_result;
 }
 
 /*****************************************************************************************
