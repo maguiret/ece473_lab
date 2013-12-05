@@ -860,6 +860,7 @@ int main()
 	adc_init(); //initialize adc
 	init_twi(); //initialize I2C interface
 	lm73_init(); //initialize temperature sensor
+	uart_init(); //initialize uart for mega48 communication
 	TCNT0_init(); //initialize timer/counter 0
 	TCNT1_init(); //initialize timer/counter 1
 	TCNT2_init(); //initialize timer/counter 2

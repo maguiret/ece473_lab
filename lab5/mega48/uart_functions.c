@@ -3,16 +3,15 @@
 //For controlling the UART and sending debug data to a terminal
 //as an aid in debugging.
 
-#ifndef F_CPU
-#define F_CPU 16000000 // cpu speed in hertz 
-#endif
-
 #include <avr/io.h>
 #include <stdlib.h>
 #include <avr/pgmspace.h>
 
-#define USART_BAUDRATE 57600  
+#define USART_BAUDRATE 9600  
 #define BAUDVALUE  ((F_CPU/(USART_BAUDRATE * 16UL)) - 1 )
+
+#define BAUD_HI
+#define BAUD_LO
 
 #include <string.h>
 
