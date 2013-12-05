@@ -110,7 +110,7 @@ volatile uint8_t snooze_state = FALSE;
 volatile uint8_t snoozes = 0;
 volatile char *alarm_on_str  = "ALARM ON        ";
 volatile char *alarm_off_str = "ALARM OFF       ";
-volatile int str_wr_cnt = 0;
+volatile uint8_t str_wr_cnt = 0;
 
 /* Variables for adc stuff */
 volatile uint8_t adc_result = 0x7F; //value not important
@@ -118,11 +118,13 @@ volatile uint8_t result_old;
 volatile uint8_t adc_bound_reached = FALSE;
 
 /* Variables for temp sensor stuff */
-volatile char lcd_temp_string[3];
+volatile char read_temp_string[3];
+volatile char *lcd_temp_string = "L:   C    R: xxC";
 volatile uint16_t lm73_temp;
 volatile extern uint8_t lm73_rd_buf[2];
 volatile extern uint8_t lm73_wr_buf[2];
 volatile uint8_t temp_changed = FALSE;
+volatile uint8_t temp_wr_cnt = 0;
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
@@ -259,8 +261,8 @@ void SPI_init()
  ****************************************************************************************/
 void lm73_init()
 {
+	/* Sends read address to the slave */
 	lm73_wr_buf[0] = LM73_PTR_TEMP;
-
 	twi_start_wr(LM73_ADDRESS, lm73_wr_buf, 1);
 	_delay_ms(2);
 }
@@ -482,13 +484,14 @@ void read_adc()
 		if (adc_result < 0x0A) {
 			OCR2 = 0x0A;
 			adc_bound_reached = TRUE;
-		} else if (adc_result > 0xF5) {
-			OCR2 = 0xF5;
-			adc_bound_reached = TRUE;
 		} else {
 			OCR2 = adc_result;
 		}
 	} else {
+		/* Clear flag when adc value comes back into range. Setting the range as
+		 * such will allow the program to detect when the adc result comes back
+		 * up, but the upper threshold is low enough that an underflow won't
+		 * trigger this block */
 		if ((adc_result >= 0x0A) && (adc_result <= 0x32))
 			adc_bound_reached = FALSE;
 	}
@@ -533,12 +536,21 @@ void read_lm73()
 	twi_start_rd(LM73_ADDRESS, lm73_rd_buf, 1);
 	//_delay_ms(2);
 
+	/* Copy high byte in */
 	lm73_temp = lm73_rd_buf[0];
 
+	/* Shift high byte to high byte location */
 	lm73_temp <<= 8;
+
+	/* Bring in the low byte */
 	lm73_temp |= lm73_rd_buf[1];
 
-	lm73_temp_convert(lcd_temp_string, lm73_temp, C);
+	/* Convert int to string */
+	lm73_temp_convert(read_temp_string, lm73_temp, C);
+
+	/* Copy the digits to the display string */
+	lcd_temp_string[3] = read_temp_string[0];
+	lcd_temp_string[4] = read_temp_string[1];
 }
 
 /*****************************************************************************************
@@ -695,9 +707,14 @@ void write_lcd()
 		}
 	/* Handles line 2 (temperature) */
 	} else if ((temp_changed == TRUE) && (alarm_going == FALSE)) {
-		home_line2();
-		string2lcd(lcd_temp_string);
-		temp_changed = FALSE;
+		if (temp_wr_cnt == 0)
+			home_line2();
+		if (lcd_temp_string[temp_wr_cnt] != '\0') {
+			char2lcd(lcd_temp_string[temp_wr_cnt++]);
+		} else { //write finished, reset character counter
+			temp_wr_cnt = 0;
+			temp_changed = FALSE;
+		}
 	}
 }
 
