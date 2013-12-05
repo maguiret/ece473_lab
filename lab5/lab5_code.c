@@ -308,6 +308,11 @@ void port_init()
 
 	/* Initialize the volume bit */
 	DDRE |= 0x08;
+
+	/* Initialize uart pins */
+	DDRE &= !(0x01);
+	DDRE |= 0x02;
+	PORTE &= ~(0x03);
 }
 
 /*****************************************************************************************
@@ -739,10 +744,10 @@ void write_lcd()
  ****************************************************************************************/
 void read_uart() 
 {
-	while (bit_is_clear(UCSR0A,RXC0));
+	//while (bit_is_clear(UCSR0A,RXC0));
 	//read_uart_string[0] = uart_getc();
 	lcd_temp_string[13] = uart_getc();
-	while (bit_is_clear(UCSR0A,RXC0));
+	//while (bit_is_clear(UCSR0A,RXC0));
 	//read_uart_string[1] = uart_getc();
 	lcd_temp_string[14] = uart_getc();
 }
@@ -792,16 +797,18 @@ ISR(TIMER0_OVF_vect)
 		INT0_count = 0;
 
 		/* Read temperature */
-		if (seconds > 5) {
+		if (seconds > 2) {
 			if (seconds & 0xFFFFFFFE) {
 				read_lm73();
 				local_temp_changed = TRUE;
 			} else {
-				read_uart();
+				//read_uart();
 				remote_temp_changed = TRUE;
 			}
 		}
 	}
+
+	read_uart();
 
 	read_buttons();
 
