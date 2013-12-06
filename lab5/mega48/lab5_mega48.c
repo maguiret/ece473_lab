@@ -44,13 +44,13 @@ void lm73_init()
 	lm73_wr_buf[0] = LM73_PTR_TEMP;
 
 	twi_start_wr(LM73_ADDRESS, lm73_wr_buf, 1);
-	_delay_ms(2);
+	//_delay_ms(2);
 }
 
 /*****************************************************************************************
  * Function:		read_lm73
  * Description:		Function reads temperature data from sensor over twi and converts
- * 			 farenhiet or celsius basec on 3rd argument to lm73_temp_convert
+ * 			 farenhiet or celsius based on 3rd argument to lm73_temp_convert
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
@@ -68,28 +68,52 @@ void read_lm73()
 }
 
 /*****************************************************************************************
+ * Function:		Interrupt Service Routine for USART recieve
+ * Description:		On incoming data, temperature is read and two bytes are sent 
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+//ISR(USART0_RX_vect)
+//{
+//	read_lm73();
+//
+//	//while (bit_is_clear(UCSR0A,TXC0));
+//	uart_putc(uart_temp_string[0]);
+//	//while (bit_is_clear(UCSR0A,TXC0));
+//	uart_putc(uart_temp_string[1]);
+//}
+/*****************************************************************************************
  ********************************* MAIN FUNCTION *****************************************
  ****************************************************************************************/
 int main()
 {
 	uint8_t cnt;
 	uint8_t strcnt = 0;
+	uint8_t dump;
 
 	init_twi();
 	lm73_init();
 	uart_init();
 
 	while (1) {
-		uart_putc('F');
-		uart_putc('U');
-		////while (bit_is_clear(UCSR0A,TXC0));
-		////uart_putc('0');
-		////while (bit_is_clear(UCSR0A,TXC0));
-		////uart_putc('1');
-		//read_lm73();
-		//while (uart_temp_string[strcnt] != '\0') 
-		//	uart_putc(uart_temp_string[strcnt++]);
-		//for (cnt = 0; cnt < 10; cnt++)
-		//	_delay_ms(100);
+		//if (bit_is_clear(UCSR0A, TXC0)) {
+		//	uart_putc(uart_temp_string[
+		read_lm73();
+
+		while (bit_is_clear(UCSR0A, RXC0));
+		dump = UDR0; //grab what is read and dump it
+		while (bit_is_clear(UCSR0A, UDRE0));
+		UDR0 = uart_temp_string[0];
+		while (bit_is_clear(UCSR0A, UDRE0));
+		UDR0 = uart_temp_string[1];
+		while (bit_is_clear(UCSR0A, TXC0));
+
+		//if (bit_is_set(UCSR0A, RXC0)) {
+		//	dump = UDR0; //trash incoming data
+		//	uart_putc(uart_temp_string[0]);
+		//	while (bit_is_clear(UCSR0A,TXC0));
+		//	uart_putc(uart_temp_string[1]);
+		//	while (bit_is_clear(UCSR0A,TXC0));
+		//}
 	}
 }

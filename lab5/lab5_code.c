@@ -128,7 +128,8 @@ volatile uint8_t remote_temp_changed = FALSE;
 volatile uint8_t local_wr_cnt = 0;
 volatile uint8_t rem_wr_cnt = 0;
 
-volatile char read_uart_string[2];
+volatile char read_uart_string[3];
+volatile uint8_t uart_ready = FALSE;
 
 /* Counters for various ISRs */
 volatile uint8_t INT0_count = 0;
@@ -731,26 +732,36 @@ void write_lcd()
 			char2lcd(lcd_temp_string[rem_wr_cnt++]);
 		} else { //write finished, reset character counter
 			rem_wr_cnt = 0;
-			local_temp_changed = FALSE;
+			remote_temp_changed = FALSE;
 		}
 	}
 }
 
 /*****************************************************************************************
  * Function:		read_uart
- * Description:		Function reads remote temperature data over serial uart
+ * Description:		Function reads remote temperature data over serial uart and stores
+ * 			 characters to appropriate locations in lcd string
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
 void read_uart() 
 {
-	//while (bit_is_clear(UCSR0A,RXC0));
-	//read_uart_string[0] = uart_getc();
+	//itoa(UDR0, read_uart_string, 10);
 	lcd_temp_string[13] = uart_getc();
-	//while (bit_is_clear(UCSR0A,RXC0));
-	//read_uart_string[1] = uart_getc();
 	lcd_temp_string[14] = uart_getc();
 }
+
+/*****************************************************************************************
+ * Function:		Interrupt Service Routine for USART recieve
+ * Description:		On incoming data, two bytes are read and flag is toggled
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+//ISR(USART0_RX_vect)
+//{
+//	read_uart();
+//	remote_temp_changed = TRUE;
+//}
 
 /*****************************************************************************************
  * Function:		Interrupt Service Routine for Timer/Counter 0
@@ -797,18 +808,19 @@ ISR(TIMER0_OVF_vect)
 		INT0_count = 0;
 
 		/* Read temperature */
-		if (seconds > 2) {
-			if (seconds & 0xFFFFFFFE) {
+		if (seconds > 5) {
+			if ((seconds % 2) == 0) {
 				read_lm73();
 				local_temp_changed = TRUE;
 			} else {
+				//start_uart();
+				//uart_putc(0x00);
 				//read_uart();
-				remote_temp_changed = TRUE;
+				//remote_temp_changed = TRUE;
+				uart_ready = TRUE;
 			}
 		}
 	}
-
-	read_uart();
 
 	read_buttons();
 
@@ -903,7 +915,7 @@ int main()
 	adc_init(); //initialize adc
 	init_twi(); //initialize I2C interface
 	lm73_init(); //initialize temperature sensor
-	uart_init(); //initialize uart for mega48 communication
+	uart_init(); //initialize uart for mega48 communication, interrupts enabled
 	TCNT0_init(); //initialize timer/counter 0
 	TCNT1_init(); //initialize timer/counter 1
 	TCNT2_init(); //initialize timer/counter 2
@@ -914,5 +926,18 @@ int main()
 
 	while (1) {
 		display_digits();
+
+		if (uart_ready == FALSE) {
+			continue;
+		} else { //if true
+			while (bit_is_clear(UCSR0A, UDRE0));
+			UDR0 = 'Q'; //arbitrary value
+			while (bit_is_clear(UCSR0A, RXC0));
+			lcd_temp_string[13] = UDR0;
+			while (bit_is_clear(UCSR0A, RXC0));
+			lcd_temp_string[14] = UDR0;
+			uart_ready = FALSE;
+			remote_temp_changed = TRUE;
+		}
 	}
 }
