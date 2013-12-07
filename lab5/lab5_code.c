@@ -746,9 +746,16 @@ void write_lcd()
  ****************************************************************************************/
 void read_uart() 
 {
-	//itoa(UDR0, read_uart_string, 10);
-	lcd_temp_string[13] = uart_getc();
-	lcd_temp_string[14] = uart_getc();
+	uart_ready = FALSE;
+
+	while (!(UCSR0A & (1 << UDRE0))); //wait for empty buffer
+	UDR0 = 'Q'; //send arbitrary value
+	//wait for recieve (included in getc)
+	lcd_temp_string[13] = uart_getc(); //read value
+	//wait again
+	lcd_temp_string[14] = uart_getc(); //read second value
+
+	remote_temp_changed = TRUE;
 }
 
 /*****************************************************************************************
@@ -808,7 +815,7 @@ ISR(TIMER0_OVF_vect)
 		INT0_count = 0;
 
 		/* Read temperature */
-		if (seconds > 5) {
+		if (seconds > 3) {
 			if ((seconds % 2) == 0) {
 				read_lm73();
 				local_temp_changed = TRUE;
@@ -930,14 +937,7 @@ int main()
 		if (uart_ready == FALSE) {
 			continue;
 		} else { //if true
-			while (bit_is_clear(UCSR0A, UDRE0));
-			UDR0 = 'Q'; //arbitrary value
-			while (bit_is_clear(UCSR0A, RXC0));
-			lcd_temp_string[13] = UDR0;
-			while (bit_is_clear(UCSR0A, RXC0));
-			lcd_temp_string[14] = UDR0;
-			uart_ready = FALSE;
-			remote_temp_changed = TRUE;
+			read_uart();
 		}
 	}
 }

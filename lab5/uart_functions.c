@@ -8,8 +8,9 @@
 #include <avr/pgmspace.h>
 #include "uart_functions.h"
 
-#define USART_BAUDRATE 9600  
-#define BAUDVALUE  ((F_CPU/(USART_BAUDRATE * 16UL)) - 1 )
+//#define USART_BAUDRATE 9600
+//#define BAUDVALUE  ((F_CPU/(USART_BAUDRATE * 16UL)) - 1 )
+#define BAUDVALUE 103 //9600
 
 #include <string.h>
 

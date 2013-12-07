@@ -90,23 +90,34 @@ int main()
 	uint8_t cnt;
 	uint8_t strcnt = 0;
 	uint8_t dump;
+	uint8_t read_new_temp = TRUE;
 
 	init_twi();
 	lm73_init();
 	uart_init();
 
 	while (1) {
-		//if (bit_is_clear(UCSR0A, TXC0)) {
-		//	uart_putc(uart_temp_string[
-		read_lm73();
+		//if (read_new_temp == TRUE) {
+		//	read_lm73();
+		//	read_new_temp = FALSE;
+		//}
 
-		while (bit_is_clear(UCSR0A, RXC0));
-		dump = UDR0; //grab what is read and dump it
-		while (bit_is_clear(UCSR0A, UDRE0));
-		UDR0 = uart_temp_string[0];
-		while (bit_is_clear(UCSR0A, UDRE0));
-		UDR0 = uart_temp_string[1];
-		while (bit_is_clear(UCSR0A, TXC0));
+		dump = uart_getc();
+		if (dump != 0) {
+			while (!(UCSR0A & (1 << UDRE0)));
+			UDR0 = '1';//uart_temp_string[0];
+			while (!(UCSR0A & (1 << UDRE0)));
+			UDR0 = '9';//uart_temp_string[1];
+			read_new_temp = TRUE;
+		}
+
+		//while (bit_is_clear(UCSR0A, RXC0));
+		//dump = UDR0; //grab what is read and dump it
+		//while (bit_is_clear(UCSR0A, UDRE0));
+		//UDR0 = uart_temp_string[0];
+		//while (bit_is_clear(UCSR0A, UDRE0));
+		//UDR0 = uart_temp_string[1];
+		//while (bit_is_clear(UCSR0A, TXC0));
 
 		//if (bit_is_set(UCSR0A, RXC0)) {
 		//	dump = UDR0; //trash incoming data
