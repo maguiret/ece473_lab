@@ -96,18 +96,20 @@ int main()
 	lm73_init();
 	uart_init();
 
+	sei();
+
 	while (1) {
-		//if (read_new_temp == TRUE) {
-		//	read_lm73();
-		//	read_new_temp = FALSE;
-		//}
+		if (read_new_temp == TRUE) {
+			read_lm73();
+			read_new_temp = FALSE;
+		}
 
 		dump = uart_getc();
 		if (dump != 0) {
 			while (!(UCSR0A & (1 << UDRE0)));
-			UDR0 = '1';//uart_temp_string[0];
+			UDR0 = uart_temp_string[0];
 			while (!(UCSR0A & (1 << UDRE0)));
-			UDR0 = '9';//uart_temp_string[1];
+			UDR0 = uart_temp_string[1];
 			read_new_temp = TRUE;
 		}
 
