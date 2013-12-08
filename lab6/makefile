@@ -1,4 +1,4 @@
-PRG            =lab5_code
+PRG            =lab6_code
 
 OBJ            = $(PRG).o lcd_functions.o lm73_functions.o twi_master.o uart_functions.o
 
