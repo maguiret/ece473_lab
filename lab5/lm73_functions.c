@@ -20,10 +20,11 @@ volatile uint8_t lm73_rd_buf[2];
  ****************************************************************************************/
 uint8_t lm73_temp_convert(char temp_digits[], uint16_t lm73_temp, uint8_t f_not_c)
 {
-	uint16_t temp = lm73_temp;
+	uint16_t temp = (lm73_temp >> 7);
 
 	/* Convert sensor output to celsius */
-	temp /= 128;
+	//temp = (lm73_temp / 128) + ((lm73_temp >> 7) & 1);
+	//temp /= 128;
 
 	if (f_not_c == TRUE) //convert to farenheit if necessary
 		temp = (((temp * 9) / 5) + 32);
