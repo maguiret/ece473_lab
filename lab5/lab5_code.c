@@ -93,7 +93,7 @@
 volatile uint16_t number;
 
 /* Global variable to hold number of seconds elapsed in the day */
-volatile uint32_t seconds = 0;
+volatile uint32_t seconds = 50;
 
 /* Global variable to hold alarm time in seconds */
 volatile uint32_t alarm_time = 0;
@@ -311,7 +311,7 @@ void port_init()
 	DDRE |= 0x08;
 
 	/* Initialize uart pins */
-	DDRE &= !(0x01);
+	DDRE &= ~(0x01);
 	DDRE |= 0x02;
 	PORTE &= ~(0x03);
 }
