@@ -74,9 +74,12 @@
 #define SECONDS_MAX 86400
 //#define SNOOZE_TIME 600
 #define SNOOZE_TIME 10
+#define FREQ_MAX 10790
+#define FREQ_MIN 8810
 
 #define COLON_AM 0xFC
 #define COLON_PM 0xF8
+#define OFF 10
 
 #define TRUE 1
 #define FALSE 0
@@ -100,6 +103,9 @@ volatile uint32_t alarm_time = 0;
 
 /* Global variable to hold current volume level */
 volatile uint8_t audio_volume;
+
+/* Variables for radio stuff */
+volatile uint16_t radio_freq = FREQ_MIN;
 
 /* Global variable to hold current state of alarm */
 volatile uint8_t alarm_on = FALSE;
@@ -153,7 +159,7 @@ volatile uint8_t encoder2_prev_a = 0x00;
 volatile uint8_t encoder2_prev_b = 0x00;
 
 /* Array to hold active low binary encodings for base 10 digits for easy access */
-volatile uint8_t sev_seg_digits[10] = {
+volatile uint8_t sev_seg_digits[11] = {
 	0b11000000, //0
 	0b11111001, //1
 	0b10100100, //2
@@ -163,7 +169,9 @@ volatile uint8_t sev_seg_digits[10] = {
 	0b10000011, //6
 	0b11111000, //7
 	0b10000000, //8
-	0b10011000  //9
+	0b10011000, //9
+	0b11111111  //off
+
 };
 
 /* Array to hold binary encodings for PORTB digit select, where the place in the array
@@ -358,6 +366,16 @@ void button_mode_toggle(uint8_t button)
 			alarm_time -= (snoozes * SNOOZE_TIME); //remove added snooze time
 			snoozes = 0; //reset snooze count for next time
 		}
+
+/*****************************************************************************************
+ *************************** REMOVE ******************************************************
+ ****************************************************************************************/
+	} else if (button == 6) {
+		pushbutton_mode ^= 0x40; //toggle sixth bit
+/*****************************************************************************************
+ *****************************************************************************************
+ ****************************************************************************************/
+
 	} else if (button == 7) { //snooze
 		if (alarm_going == TRUE) { //alarm is going off
 			alarm_going = FALSE; //turn off
@@ -395,10 +413,22 @@ void clock_bargraph()
  ****************************************************************************************/
 void display_digits() 
 {
+	/* Function Variables */
+	uint8_t min_l;
+        uint8_t min_h;
+        uint8_t hrs_l;
+        uint8_t hrs_h;
+
 	uint32_t tmp_sec; //tmp variable to modify number for display
 	if ((pushbutton_mode & 0x04) && //display alarm time if set alarm time mode is
 	    !(pushbutton_mode & 0x02))  //active
 		tmp_sec = alarm_time;
+
+	/*********DELETE*********/
+	else if (pushbutton_mode & 0x40)
+		tmp_sec = (radio_freq / 10);
+	/*********DELETE*********/
+
 	else
 		tmp_sec = seconds; //displays time otherwise
 	uint8_t cur_value; //current digit value to display
@@ -410,36 +440,52 @@ void display_digits()
 	DDRA = 0xFF; //output
 	DELAY_CLK;
 
-	/* Converts seconds to minutes, gets minutes for any given hour with mod */
-	uint8_t minutes = ((tmp_sec / 60) % 60);
+	if (pushbutton_mode & 0x40) {
+		//tmp_sec = radio_freq;
 
-	/* Converts seconds to hours, will not exceed 24 due to other program logic,
-	 * handles both 24 and 12 hour time */
-	uint8_t hours = (tmp_sec / 3600);
-	
-	/* If am/pm mode */
-	if (!(pushbutton_mode & 0x01)) {
-		/* Set colon appropriately, convert to 12 hr time */
-		if (hours == 0) {
-			hours += 12;
-			colon = COLON_AM;
-		} else if (hours > 0 && hours < 12) {
-			colon = COLON_AM;
-		} else if (hours == 12) {
-			colon = COLON_PM;
-		} else {
-			hours -= 12;
-			colon = COLON_PM;
-		}
+		/* Set digits appropriately, add in decimal point for second digit */
+		min_l = tmp_sec % 10;
+		min_h = (tmp_sec / 10) % 10;
+		hrs_l = (tmp_sec / 100) % 10;
+		hrs_h = (tmp_sec / 1000) % 10;
+		if (hrs_h == 0)
+			hrs_h = OFF; //no leading zero
 	} else {
-		colon = COLON_AM;
-	}
 
-	/* Isolates most and least significant bits of each variable */
-	uint8_t min_l = minutes % 10;
-	uint8_t min_h = minutes / 10;
-	uint8_t hrs_l = hours % 10;
-	uint8_t hrs_h = hours / 10;
+		/* Converts seconds to minutes, gets minutes for any given hour with mod */
+		uint8_t minutes = ((tmp_sec / 60) % 60);
+
+		/* Converts seconds to hours, will not exceed 24 due to other program logic,
+		 * handles both 24 and 12 hour time */
+		uint8_t hours = (tmp_sec / 3600);
+		
+		/* If am/pm mode */
+		if (!(pushbutton_mode & 0x01)) {
+			/* Set colon appropriately, convert to 12 hr time */
+			if (hours == 0) {
+				hours += 12;
+				colon = COLON_AM;
+			} else if (hours > 0 && hours < 12) {
+				colon = COLON_AM;
+			} else if (hours == 12) {
+				colon = COLON_PM;
+			} else {
+				hours -= 12;
+				colon = COLON_PM;
+			}
+		} else {
+			colon = COLON_AM;
+		}
+
+		/* Isolates most and least significant bits of each variable */
+		min_l = minutes % 10;
+		min_h = minutes / 10;
+		hrs_l = hours % 10;
+		hrs_h = hours / 10;
+		if (!(pushbutton_mode & 0x01) && (hrs_h == 0)) {
+			hrs_h = OFF;
+		}
+	}
 
 	/* Loop displays each base 10 digit one by one. Mods by 10 to get digit, displays
 	 * encoded digit to 7-seg, divides by 10 to get next digit. Loops until cur_value
@@ -463,12 +509,16 @@ void display_digits()
 			cur_value = hrs_h;
 
 		PORTA = sev_seg_digits[cur_value]; //display digit
+		if ((cur_digit == 1) && (pushbutton_mode & 0x40))
+			PORTA &= ~(0x80);
 
 		/* Display colon (or not) */
-		if (cur_digit == 4 && colon_state == 1)
-			PORTA = colon; //colon on
-		else if (cur_digit == 4 && colon_state != 1)
-			PORTA = 0xFF; //colon off
+		if (!(pushbutton_mode & 0x40)) {
+			if (cur_digit == 4 && colon_state == 1)
+				PORTA = colon; //colon on
+			else if (cur_digit == 4 && colon_state != 1)
+				PORTA = 0xFF; //colon off
+		}
 
 		_delay_loop_1(200); //delay for about arg*3 cycles
 	}
@@ -676,13 +726,30 @@ void check_encoders()
 			if (alarm_time > SECONDS_MAX)
 				alarm_time = SECONDS_MAX-60;
 		}
-	} else { //otherwise, left encoder modifies audio volume (right will control fm frequency later)
+	} else { 
+		/* If left encoder, volume */
 		if (check_1 == 0)
 			if (audio_volume < 0xA0)
 				audio_volume++;
 		if (check_1 == 1)
 			if (audio_volume > 0x00)
 				audio_volume--;
+
+		/* If right encoder, frequency */
+		if (check_2 == 0) {
+			if (radio_freq <= FREQ_MAX) {
+				radio_freq += 20;
+				if (radio_freq > FREQ_MAX)
+					radio_freq = FREQ_MIN;
+			}
+		}
+		if (check_2 == 1) {
+			if (radio_freq >= FREQ_MIN) {
+				radio_freq -= 20;
+				if (radio_freq < FREQ_MIN)
+					radio_freq = FREQ_MAX;
+			}
+		}
 	}
 }
 
