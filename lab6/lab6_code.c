@@ -127,6 +127,7 @@ volatile uint8_t local_temp_changed = FALSE;
 volatile uint8_t remote_temp_changed = FALSE;
 volatile uint8_t local_wr_cnt = 0;
 volatile uint8_t rem_wr_cnt = 0;
+volatile uint8_t local_lm73_ready = FALSE;
 
 volatile char read_uart_string[3];
 volatile uint8_t uart_ready = FALSE;
@@ -311,7 +312,7 @@ void port_init()
 	DDRE |= 0x08;
 
 	/* Initialize uart pins */
-	DDRE &= !(0x01);
+	DDRE &= ~(0x01);
 	DDRE |= 0x02;
 	PORTE &= ~(0x03);
 }
@@ -543,7 +544,7 @@ void read_buttons()
  ****************************************************************************************/
 void read_lm73()
 {
-	twi_start_rd(LM73_ADDRESS, lm73_rd_buf, 1);
+	twi_start_rd(LM73_ADDRESS, lm73_rd_buf, 2);
 	//_delay_ms(2);
 
 	/* Copy high byte in */
@@ -754,21 +755,7 @@ void read_uart()
 	lcd_temp_string[13] = uart_getc(); //read value
 	//wait again
 	lcd_temp_string[14] = uart_getc(); //read second value
-
-	remote_temp_changed = TRUE;
 }
-
-/*****************************************************************************************
- * Function:		Interrupt Service Routine for USART recieve
- * Description:		On incoming data, two bytes are read and flag is toggled
- * Arguments:		None
- * Return:		None
- ****************************************************************************************/
-//ISR(USART0_RX_vect)
-//{
-//	read_uart();
-//	remote_temp_changed = TRUE;
-//}
 
 /*****************************************************************************************
  * Function:		Interrupt Service Routine for Timer/Counter 0
@@ -788,7 +775,7 @@ ISR(TIMER0_OVF_vect)
 	uint8_t old_PORTB = PORTB;
 	uint8_t old_DDRA = DDRA;
 
-	static uint8_t pwm_dir = 1;
+	static uint8_t uart_or_twi = 0;
 
 	INT0_count++;
 	if (INT0_count == 128) { //every 128 interrupts...
@@ -813,19 +800,16 @@ ISR(TIMER0_OVF_vect)
 		/* Toggle state of colon, reset interrupt count */
 		colon_state ^= 0x01; 
 		INT0_count = 0;
+	}
 
-		/* Read temperature */
-		if (seconds > 3) {
-			if ((seconds % 2) == 0) {
-				read_lm73();
-				local_temp_changed = TRUE;
-			} else {
-				//start_uart();
-				//uart_putc(0x00);
-				//read_uart();
-				//remote_temp_changed = TRUE;
-				uart_ready = TRUE;
-			}
+	/* Read a temperature every quarter second, alternate between local and remote */
+	if ((INT0_count % 32) == 0) {
+		if (uart_or_twi == 0) {
+			local_lm73_ready = TRUE;
+			uart_or_twi ^= 1;
+		} else {
+			uart_ready = TRUE;
+			uart_or_twi ^= 1;
 		}
 	}
 
@@ -934,10 +918,20 @@ int main()
 	while (1) {
 		display_digits();
 
-		if (uart_ready == FALSE) {
+		PORTA = 0xFF;
+
+		/* Do uart or twi stuff if necessary */
+		if ((uart_ready == TRUE) || (local_lm73_ready == TRUE)) {
+			if (uart_ready == TRUE) {
+				read_uart();
+				remote_temp_changed = TRUE;
+			} else if (local_lm73_ready == TRUE) {
+				read_lm73();
+				local_temp_changed = TRUE;
+			}
+		} else {
 			continue;
-		} else { //if true
-			read_uart();
 		}
+
 	}
 }
