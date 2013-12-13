@@ -106,6 +106,9 @@ volatile uint8_t audio_volume;
 
 /* Variables for radio stuff */
 volatile uint16_t radio_freq = FREQ_MIN;
+volatile uint8_t freq_changed = FALSE;
+volatile uint8_t freq_countdown = FALSE;
+volatile uint8_t freq_cnt = 0;
 
 /* Global variable to hold current state of alarm */
 volatile uint8_t alarm_on = FALSE;
@@ -366,16 +369,6 @@ void button_mode_toggle(uint8_t button)
 			alarm_time -= (snoozes * SNOOZE_TIME); //remove added snooze time
 			snoozes = 0; //reset snooze count for next time
 		}
-
-/*****************************************************************************************
- *************************** REMOVE ******************************************************
- ****************************************************************************************/
-	} else if (button == 6) {
-		pushbutton_mode ^= 0x40; //toggle sixth bit
-/*****************************************************************************************
- *****************************************************************************************
- ****************************************************************************************/
-
 	} else if (button == 7) { //snooze
 		if (alarm_going == TRUE) { //alarm is going off
 			alarm_going = FALSE; //turn off
@@ -420,17 +413,15 @@ void display_digits()
         uint8_t hrs_h;
 
 	uint32_t tmp_sec; //tmp variable to modify number for display
-	if ((pushbutton_mode & 0x04) && //display alarm time if set alarm time mode is
-	    !(pushbutton_mode & 0x02))  //active
+	if ((pushbutton_mode & 0x04) &&  //display alarm time if set alarm time mode is
+	    !(pushbutton_mode & 0x02)) { //active
 		tmp_sec = alarm_time;
-
-	/*********DELETE*********/
-	else if (pushbutton_mode & 0x40)
+	} else if ((freq_changed == TRUE) ||   //display radio frequency if right encoder
+		   (freq_countdown == TRUE)) { //has been turned in "normal" mode
 		tmp_sec = (radio_freq / 10);
-	/*********DELETE*********/
-
-	else
+	} else {
 		tmp_sec = seconds; //displays time otherwise
+	}
 	uint8_t cur_value; //current digit value to display
 	uint8_t cur_digit = 0; //current digit to display on
 	uint8_t colon;
@@ -440,9 +431,10 @@ void display_digits()
 	DDRA = 0xFF; //output
 	DELAY_CLK;
 
-	if (pushbutton_mode & 0x40) {
-		//tmp_sec = radio_freq;
-
+	/* If encoder has just been turned or if the program is in the frequency display
+	 * timeout count thing, the frequency is display. Makes it so that the timout
+	 * count resets if the encoder is turned while in the timeout */
+	if ((freq_changed == TRUE) || (freq_countdown == TRUE)) {
 		/* Set digits appropriately, add in decimal point for second digit */
 		min_l = tmp_sec % 10;
 		min_h = (tmp_sec / 10) % 10;
@@ -451,7 +443,6 @@ void display_digits()
 		if (hrs_h == 0)
 			hrs_h = OFF; //no leading zero
 	} else {
-
 		/* Converts seconds to minutes, gets minutes for any given hour with mod */
 		uint8_t minutes = ((tmp_sec / 60) % 60);
 
@@ -513,10 +504,13 @@ void display_digits()
 			PORTA &= ~(0x80);
 
 		/* Display colon (or not) */
-		if (!(pushbutton_mode & 0x40)) {
+		if ((freq_changed == FALSE) && (freq_countdown == FALSE)) {
 			if (cur_digit == 4 && colon_state == 1)
 				PORTA = colon; //colon on
 			else if (cur_digit == 4 && colon_state != 1)
+				PORTA = 0xFF; //colon off
+		} else { //turn off if displaying frequency
+			if (cur_digit == 4)
 				PORTA = 0xFF; //colon off
 		}
 
@@ -742,6 +736,7 @@ void check_encoders()
 				if (radio_freq > FREQ_MAX)
 					radio_freq = FREQ_MIN;
 			}
+			freq_changed = TRUE;
 		}
 		if (check_2 == 1) {
 			if (radio_freq >= FREQ_MIN) {
@@ -749,6 +744,7 @@ void check_encoders()
 				if (radio_freq < FREQ_MIN)
 					radio_freq = FREQ_MAX;
 			}
+			freq_changed = TRUE;
 		}
 	}
 }
@@ -867,6 +863,22 @@ ISR(TIMER0_OVF_vect)
 		/* Toggle state of colon, reset interrupt count */
 		colon_state ^= 0x01; 
 		INT0_count = 0;
+
+		/* Handle the showing of the frequency for a couple seconds on encoder
+		 * turn */
+		if (freq_changed == TRUE) {
+			freq_changed = FALSE;
+			freq_countdown = TRUE;
+			freq_cnt = 0;
+		}
+		if (freq_countdown == TRUE) {
+			if (freq_cnt == 1) {
+				freq_countdown = FALSE;
+			} else {
+				freq_cnt++;
+			}
+		}
+
 	}
 
 	/* Read a temperature every quarter second, alternate between local and remote */
