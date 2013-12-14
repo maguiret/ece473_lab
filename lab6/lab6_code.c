@@ -13,6 +13,9 @@
  * - PORTB bit 1 goes to the clock inputs of the bar graph and encoder boards
  * - PORTB bit 2 goes to the serial in of the bar graph display
  * - PORTB bit 3 goes to the serial out of the encoder board
+ * - PORTD bit 0 is twi clock
+ * - PORTD bit 1 is twi data
+ * - PORTD bit 2
  *****************************************************************************************
  *
  ****************************LAB 2 SPECIFICS**********************************************
@@ -418,7 +421,7 @@ void button_mode_toggle(uint8_t button)
 		}
 	} else if (button == 4) {
 		pushbutton_mode ^= 0x10;
-		alarm_mode ^= 1;
+		alarm_mode ^= 1; //toggles regular and radio alarm modes
 		alarm_state_changed = TRUE;
 	} else if (button == 5) {
 		pushbutton_mode ^= 0x20;
@@ -969,7 +972,6 @@ ISR(TIMER0_OVF_vect)
 				freq_cnt++;
 			}
 		}
-
 	}
 
 	/* Read a temperature every quarter second, alternate between local and remote */
@@ -1068,7 +1070,8 @@ ISR(TIMER3_COMPA_vect)
 
 /*****************************************************************************************
  * Function:		Interrupt Service Routine for external interrupt 7 (PE7)
- * Description:		
+ * Description:		INT7 is responsible for handling the GPO2/INT pin on the radio
+ * 			 board. No ISR is needed.
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
@@ -1107,6 +1110,7 @@ int main()
 
 		PORTA = 0xFF;
 
+		/* Turn radio on and off as needed */
 		if (radio_state_change == TRUE) {
 			radio_state_change = FALSE;
 			if (radio_on == TRUE) {
@@ -1120,6 +1124,7 @@ int main()
 			}
 		}
 
+		/* Get signal strength */
 		if ((radio_on == TRUE) && (update_sig_str == TRUE)) {
 			update_sig_str = FALSE;
 			fm_tune_status();
