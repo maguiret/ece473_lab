@@ -109,6 +109,8 @@ volatile uint8_t freq_changed = FALSE;
 volatile uint8_t freq_countdown = FALSE;
 volatile uint8_t freq_cnt = 0;
 volatile uint8_t write_freq = TRUE;
+volatile uint8_t radio_on = FALSE;
+volatile uint8_t radio_state_change = FALSE;
 
 uint16_t current_fm_freq = 8870; //externed variable from si4734.c
 uint16_t current_am_freq;            //externed variable from si4734.c
@@ -386,11 +388,11 @@ void button_mode_toggle(uint8_t button)
 	if (button == 0) { //am/pm
 		pushbutton_mode ^= 0x01; //toggle first bit
 	} else if (button == 1) { //clock set
-	 	pushbutton_mode  ^= 0x02; //toggle second bit
+	 	pushbutton_mode  ^= 0x02; 
 	} else if (button == 2) { //alarm set
-	 	pushbutton_mode  ^= 0x04; //toggle third bit
+	 	pushbutton_mode  ^= 0x04; 
 	} else if (button == 3) { //alarm armed
-		pushbutton_mode ^= 0x08; //toggle fourth bit
+		pushbutton_mode ^= 0x08; 
 		alarm_on ^= 1; //toggles alarm state
 		alarm_state_changed = TRUE; //sends state change flag
 		if (alarm_going == TRUE) { //if alarm is going off
@@ -398,6 +400,12 @@ void button_mode_toggle(uint8_t button)
 			alarm_time -= (snoozes * SNOOZE_TIME); //remove added snooze time
 			snoozes = 0; //reset snooze count for next time
 		}
+	} else if (button == 4) {
+		//toggle signal/radio alarm mode
+	} else if (button == 5) {
+		pushbutton_mode ^= 0x20;
+		radio_on ^= 1;
+		radio_state_change = TRUE;
 	} else if (button == 7) { //snooze
 		if (alarm_going == TRUE) { //alarm is going off
 			alarm_going = FALSE; //turn off
@@ -1036,13 +1044,22 @@ int main()
 	TCNT3_init(); 
 	radio_init(); 
 
-	fm_pwr_up();
-	_delay_ms(1);
-
 	while (1) {
 		display_digits();
 
 		PORTA = 0xFF;
+
+		/* Turn radio on/off */
+		if (radio_state_change == TRUE) {
+			radio_state_change = FALSE;
+			if (radio_on == TRUE) {
+				fm_pwr_up();
+				_delay_us(500);
+				fm_tune_freq();
+			} else {
+				radio_pwr_dwn();
+			}
+		}
 
 		/* Update fm frequency */
 		if (write_freq == TRUE) {
