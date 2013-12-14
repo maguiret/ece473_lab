@@ -128,6 +128,7 @@ volatile uint8_t alarm_going = FALSE;
 volatile uint8_t alarm_toggle = 0;
 volatile uint8_t alarm_mode = 0;
 volatile uint8_t radio_alarm_on = FALSE;
+volatile uint8_t radio_alarm_start = FALSE;
 volatile uint8_t snooze_state = FALSE;
 volatile uint8_t snoozes = 0;
 volatile char *alarm_on_str    = "ALARM ON        ";
@@ -407,6 +408,7 @@ void button_mode_toggle(uint8_t button)
 			alarm_time -= (snoozes * SNOOZE_TIME); //remove added snooze time
 			snoozes = 0; //reset snooze count for next time
 			if (radio_was_on == TRUE) {
+				radio_was_on = FALSE;
 				radio_on = TRUE;
 				radio_state_change = TRUE;
 			}
@@ -426,6 +428,7 @@ void button_mode_toggle(uint8_t button)
 			alarm_time = (alarm_time + SNOOZE_TIME) % SECONDS_MAX; //10 second snooze
 			snoozes++; //increment snooze counter
 			if (radio_was_on == TRUE) {
+				radio_was_on = FALSE;
 				radio_on = TRUE;
 				radio_state_change = TRUE;
 			}
@@ -931,10 +934,12 @@ ISR(TIMER0_OVF_vect)
 			DDRD &= ~(0x04);
 
 		/* Turn on radio alarm */
-		if ((alarm_on == TRUE) && (alarm_going == TRUE) && (alarm_mode == 1))
-			radio_alarm_on = TRUE;
-		else
-			radio_alarm_on = FALSE;
+		if ((alarm_on == TRUE) && (alarm_going == TRUE) && (alarm_mode == 1)) {
+			if (radio_on == FALSE) {
+				radio_on = TRUE;
+				radio_state_change = TRUE;
+			}
+		}
 
 		/* Reset seconds at max time */
 		if (seconds == SECONDS_MAX)
@@ -1096,10 +1101,7 @@ int main()
 
 		PORTA = 0xFF;
 
-		/* Turn radio on/off */
-//		if (radio_alarm_on == TRUE) {
-//
-/*		} else */if (radio_state_change == TRUE) {
+		if (radio_state_change == TRUE) {
 			radio_state_change = FALSE;
 			if (radio_on == TRUE) {
 				_delay_ms(1);
