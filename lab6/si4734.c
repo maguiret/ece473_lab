@@ -18,12 +18,7 @@ uint8_t si4734_rd_buf[15];         //buffer for holding data recieved from the s
 uint8_t si4734_tune_status_buf[8]; //buffer for holding tune_status data  
 
 enum radio_band{FM, AM, SW};
-extern volatile enum radio_band current_radio_band;
-
-extern uint16_t eeprom_fm_freq;
-extern uint16_t eeprom_am_freq;
-extern uint16_t eeprom_sw_freq;
-extern uint8_t  eeprom_volume;
+volatile enum radio_band current_radio_band;
 
 extern uint16_t current_fm_freq;
 extern uint16_t current_am_freq;
@@ -64,7 +59,7 @@ void fm_tune_freq(){
   //send fm tune command
   twi_start_wr(SI4734_ADDRESS, si4734_wr_buf, 5);
 
-    _delay_ms(80);
+    _delay_us(10);
 //get the interrupt status 
 //    return(get_int_status());
 //    return(1);
@@ -126,8 +121,6 @@ void sw_tune_freq(){
 
 void fm_pwr_up(){
 //restore the previous fm frequency  
- current_fm_freq = eeprom_read_word(&eeprom_fm_freq); //TODO: only this one does not work 
- current_volume  = eeprom_read_byte(&eeprom_volume); //TODO: only this one does not work 
 
 //send fm power up command
   si4734_wr_buf[0] = 0x01;
@@ -138,6 +131,8 @@ void fm_pwr_up(){
   _delay_ms(120);   //startup delay as specified 
   
   set_property(GPO_IEN, (1<<GPO_IEN_STCIEN_SHFT));    //enable Seek/Tune Complete interrupt
+
+  current_radio_band = FM;
 
   //get the interrupt status 
 //  return(get_int_status());
@@ -151,8 +146,6 @@ void fm_pwr_up(){
 
 void am_pwr_up(){
 //restore the previous am frequency  
-  current_am_freq = eeprom_read_word(&eeprom_am_freq);
-  current_volume  = eeprom_read_byte(&eeprom_volume); //TODO: only this one does not work 
 
 //send am power up command
   si4734_wr_buf[0] = 0x01;
@@ -174,8 +167,6 @@ void am_pwr_up(){
 
 void sw_pwr_up(){
 //restore the previous sw frequency  
-  current_sw_freq = eeprom_read_word(&eeprom_sw_freq);
-  current_volume  = eeprom_read_byte(&eeprom_volume); //TODO: only this one does not work 
 
 //send sw power up command (same as am, only tuning rate is different)
     si4734_wr_buf[0] = 0x01;
@@ -212,16 +203,6 @@ void sw_pwr_up(){
 //
 
 void radio_pwr_dwn(){
-
-//save current frequency to EEPROM
-switch(current_radio_band){
-  case(FM) : eeprom_write_word(&eeprom_fm_freq, current_fm_freq); break;
-  case(AM) : eeprom_write_word(&eeprom_am_freq, current_am_freq); break;
-  case(SW) : eeprom_write_word(&eeprom_sw_freq, current_sw_freq); break;
-  default  : break;
-}//switch      
-
-  eeprom_write_byte(&eeprom_volume, current_volume); //save current volume level
 
 //send fm power down command
     si4734_wr_buf[0] = 0x11;

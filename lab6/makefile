@@ -1,8 +1,8 @@
 PRG            =lab6_code
 
-OBJ            = $(PRG).o lcd_functions.o lm73_functions.o twi_master.o uart_functions.o
+OBJ            = $(PRG).o lcd_functions.o lm73_functions.o twi_master.o uart_functions.o si4734.o
 
-SRCS	       = $(PRG).c lcd_functions.c lm73_functions.c twi_master.c uart_functions.c
+SRCS	       = $(PRG).c lcd_functions.c lm73_functions.c twi_master.c uart_functions.c si4734.c
 
 MCU_TARGET     = atmega128
 PROGRAMMER_TARGET = M128

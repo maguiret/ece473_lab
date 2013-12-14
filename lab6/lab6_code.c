@@ -42,8 +42,8 @@
  *     1: Set clock time
  *     2: Set alarm time
  *     3: Alarm on/off
- *     4:
- *     5:
+ *     4: Alarm tone/radio toggle
+ *     5: Radio toggle
  *     6:
  *     7: Press for snooze
  * 
@@ -105,10 +105,15 @@ volatile uint32_t alarm_time = 0;
 volatile uint8_t audio_volume;
 
 /* Variables for radio stuff */
-volatile uint16_t radio_freq = FREQ_MIN;
 volatile uint8_t freq_changed = FALSE;
 volatile uint8_t freq_countdown = FALSE;
 volatile uint8_t freq_cnt = 0;
+volatile uint8_t write_freq = TRUE;
+
+uint16_t current_fm_freq = 8870; //externed variable from si4734.c
+uint16_t current_am_freq;            //externed variable from si4734.c
+uint16_t current_sw_freq;            //externed variable from si4734.c
+uint8_t  current_volume;             //externed variable from si4734.c
 
 /* Global variable to hold current state of alarm */
 volatile uint8_t alarm_on = FALSE;
@@ -248,8 +253,8 @@ void TCNT3_init()
 		   (1 << COM3A1)); //non-inverted PWM (for active high)
 	TCCR3B |= ((1 << WGM32) | //set fast PWM 8 bit mode
 		   (1 << CS31)); //8 prescaler
-	OCR3AL = 0x7F; //Initialize at 50% duty cycle, only low is used for 8 bit PWM
-	audio_volume = 0x50; //Stores value to audio volume variable
+	OCR3AL = 0x70; //Initialize at 50% duty cycle, only low is used for 8 bit PWM
+	audio_volume = 0x70; //Stores value to audio volume variable
 }
 
 /*****************************************************************************************
@@ -304,6 +309,27 @@ void adc_init()
 }
 
 /*****************************************************************************************
+ * Function:		radio_init
+ * Description:		Initializes the radio 
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+void radio_init()
+{
+	PORTE &= ~(0x80); //int2 initially low to sense TWI mode
+	DDRE |= 0x80;      //turn on Port E bit 7 to drive it low
+	PORTE |= 0x04; //hardware reset Si4734
+	_delay_us(200);     //hold for 200us, 100us by spec
+	PORTE &= ~(0x04); //release reset
+	_delay_us(30);      //5us required because of my slow I2C translators I suspect
+			    //Si code in "low" has 30us delay...no explaination
+	DDRE &= ~(0x80);   //now Port E bit 7 becomes input from the radio interrupt
+
+	EIMSK |= (1 << INT7);  //initialize interrupt pin
+	EICRB |= (1 << ISC70);
+}
+
+/*****************************************************************************************
  * Function:		port_init
  * Description:		Initialize necessary ports not covered in other init functions
  * Arguments:		None
@@ -326,6 +352,9 @@ void port_init()
 	DDRE &= ~(0x01);
 	DDRE |= 0x02;
 	PORTE &= ~(0x03);
+
+	/* Initialize radio reset pin */
+	DDRE |= 0x04;
 }
 
 /*****************************************************************************************
@@ -418,7 +447,7 @@ void display_digits()
 		tmp_sec = alarm_time;
 	} else if ((freq_changed == TRUE) ||   //display radio frequency if right encoder
 		   (freq_countdown == TRUE)) { //has been turned in "normal" mode
-		tmp_sec = (radio_freq / 10);
+		tmp_sec = (current_fm_freq / 10);
 	} else {
 		tmp_sec = seconds; //displays time otherwise
 	}
@@ -500,7 +529,9 @@ void display_digits()
 			cur_value = hrs_h;
 
 		PORTA = sev_seg_digits[cur_value]; //display digit
-		if ((cur_digit == 1) && (pushbutton_mode & 0x40))
+
+		/* Display decimal point for radio frequency */
+		if ((cur_digit == 1) && ((freq_changed == TRUE) || (freq_countdown == TRUE)))
 			PORTA &= ~(0x80);
 
 		/* Display colon (or not) */
@@ -724,27 +755,29 @@ void check_encoders()
 		/* If left encoder, volume */
 		if (check_1 == 0)
 			if (audio_volume < 0xA0)
-				audio_volume++;
+				audio_volume += 8;
 		if (check_1 == 1)
 			if (audio_volume > 0x00)
-				audio_volume--;
+				audio_volume -= 8;
 
 		/* If right encoder, frequency */
 		if (check_2 == 0) {
-			if (radio_freq <= FREQ_MAX) {
-				radio_freq += 20;
-				if (radio_freq > FREQ_MAX)
-					radio_freq = FREQ_MIN;
+			if (current_fm_freq <= FREQ_MAX) {
+				current_fm_freq += 20;
+				if (current_fm_freq > FREQ_MAX)
+					current_fm_freq = FREQ_MIN;
 			}
 			freq_changed = TRUE;
+			write_freq = TRUE;
 		}
 		if (check_2 == 1) {
-			if (radio_freq >= FREQ_MIN) {
-				radio_freq -= 20;
-				if (radio_freq < FREQ_MIN)
-					radio_freq = FREQ_MAX;
+			if (current_fm_freq >= FREQ_MIN) {
+				current_fm_freq -= 20;
+				if (current_fm_freq < FREQ_MIN)
+					current_fm_freq = FREQ_MAX;
 			}
 			freq_changed = TRUE;
+			write_freq = TRUE;
 		}
 	}
 }
@@ -970,6 +1003,14 @@ ISR(TIMER3_COMPA_vect)
 	DELAY_CLK;
 }
 
+/*****************************************************************************************
+ * Function:		Interrupt Service Routine for external interrupt 7 (PE7)
+ * Description:		
+ * Arguments:		None
+ * Return:		None
+ ****************************************************************************************/
+ISR(INT7_vect) {}
+
 
 /*****************************************************************************************
  ********************************* MAIN FUNCTION *****************************************
@@ -977,27 +1018,37 @@ ISR(TIMER3_COMPA_vect)
 int main()
 {
 	number = 0; //initialize number
-	
-	/* Initialization */
-	port_init(); //initialize remaining ports
-	SPI_init(); //initialize SPI master on PORTB 1-3
-	lcd_init(); //initialize lcd 
-	adc_init(); //initialize adc
-	init_twi(); //initialize I2C interface
-	lm73_init(); //initialize temperature sensor
-	uart_init(); //initialize uart for mega48 communication, interrupts enabled
-	TCNT0_init(); //initialize timer/counter 0
-	TCNT1_init(); //initialize timer/counter 1
-	TCNT2_init(); //initialize timer/counter 2
-	TCNT3_init(); //initialize timer/counter 3
 
 	/* enable interrupts */
 	sei();
+	
+	/* Initialization */
+	port_init(); //initialize ports not covered elsewhere
+	SPI_init(); 
+	lcd_init();
+	adc_init(); 
+	init_twi(); //initialize I2C interface
+	lm73_init(); 
+	uart_init(); //initialize uart for mega48 communication, interrupts enabled
+	TCNT0_init(); 
+	TCNT1_init(); 
+	TCNT2_init(); 
+	TCNT3_init(); 
+	radio_init(); 
+
+	fm_pwr_up();
+	_delay_ms(1);
 
 	while (1) {
 		display_digits();
 
 		PORTA = 0xFF;
+
+		/* Update fm frequency */
+		if (write_freq == TRUE) {
+			write_freq = FALSE;
+			fm_tune_freq();
+		}
 
 		/* Do uart or twi stuff if necessary */
 		if ((uart_ready == TRUE) || (local_lm73_ready == TRUE)) {
