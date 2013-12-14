@@ -410,7 +410,7 @@ void button_mode_toggle(uint8_t button)
 			alarm_going = FALSE; //turn alarm off
 			alarm_time -= (snoozes * SNOOZE_TIME); //remove added snooze time
 			snoozes = 0; //reset snooze count for next time
-			if (alarm_mode = 1) { //if radio alarm mode
+			if (alarm_mode == 1) { //if radio alarm mode
 				radio_on = FALSE;
 				radio_state_change = TRUE;
 			} else if (radio_was_on == TRUE) {
@@ -433,7 +433,7 @@ void button_mode_toggle(uint8_t button)
 			snooze_state = TRUE; //in snooze
 			alarm_time = (alarm_time + SNOOZE_TIME) % SECONDS_MAX; //10 second snooze
 			snoozes++; //increment snooze counter
-			if (alarm_mode = 1) { //if radio alarm mode
+			if (alarm_mode == 1) { //if radio alarm mode
 				radio_on = FALSE;
 				radio_state_change = TRUE;
 			} else if (radio_was_on == TRUE) {
