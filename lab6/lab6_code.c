@@ -5,35 +5,34 @@
  * Code for ECE 473 Lab.
  * 
  ****************************HARDWARE SETUP***********************************************
- * - PORTA is connected to the segments of the LED display. and to the pushbuttons.
- * - PORTA.0 corresponds to segment a, PORTA.1 corresponds to segement b, etc.
- * - PORTB bits 4-6 go to a,b,c inputs of the 74HC138.
- * - PORTB bit 7 goes to the PWM transistor base.
+ *
+ * - PORTA bit 0 is connected to 7-seg segment A and button 0
+ * - PORTA bit 1 is connected to 7-seg segment B and button 1
+ * - PORTA bit 2 is connected to 7-seg segment C and button 2
+ * - PORTA bit 3 is connected to 7-seg segment D and button 3
+ * - PORTA bit 4 is connected to 7-seg segment E and button 4
+ * - PORTA bit 5 is connected to 7-seg segment F and button 5
+ * - PORTA bit 6 is connected to 7-seg segment G and button 6
+ * - PORTA bit 7 is connected to 7-seg segment H and button 7
+ * 
  * - PORTB bit 0 goes to shift load on the bar graph display
  * - PORTB bit 1 goes to the clock inputs of the bar graph and encoder boards
  * - PORTB bit 2 goes to the serial in of the bar graph display
  * - PORTB bit 3 goes to the serial out of the encoder board
- * - PORTD bit 0 is twi clock
- * - PORTD bit 1 is twi data
- * - PORTD bit 2
- *****************************************************************************************
+ * - PORTB bits 4-6 go to a,b,c inputs of the 74HC138.
+ * - PORTB bit 7 goes to the display PWM transistor base.
  *
- ****************************LAB 2 SPECIFICS**********************************************
- * - Pull PWM pin PORTB 7 low
- * - LED segments are active low
- * - Buttons are active low
- * - EN_N tied low, EN tied high on LED board
- * - COM_EN on button board tied to DEC7 on LED board
- *   - Tristate in HI-Z when DEC7 high (PORTB |= 0b01110000)
- * - COM_LVL on button board tied low
- *****************************************************************************************
+ * - PORTD bit 0 is twi clock for temp sensor and radio board
+ * - PORTD bit 1 is twi data for temp sensor and radio board
+ * - PORTD bit 2 is used to generate the alarm tone into the summing amp
  *
- ****************************LAB 3 SPECIFICS**********************************************
- * - Come back to this
- *****************************************************************************************
+ * - PORTE bit 0 is the UART recieve pin connected to the 9-pin rs-232 port
+ * - PORTE bit 1 is the UART transmit pin connected to the 9-pin rs-232 port
+ * - PORTE bit 2 is tied to the radio board reset pin
+ * - PORTE bit 3 is used as pwm and tied to the audio amplifier volume control
+ * - PORTE bit 7 is used as the ADC and is tied to the output of the light sensor circuit
  *
- ****************************LAB 4 SPECIFICS**********************************************
- * - Pushbutton interface:
+ * - Pushbutton Interface:
  *   --------------------------------------------------
  *   |  __    __    __    __    __    __    __    __  |
  *   | /  \  /  \  /  \  /  \  /  \  /  \  /  \  /  \ |
@@ -41,24 +40,26 @@
  *   |   7     6     5     4     3     2     1     0  |
  *   --------------------------------------------------
  *     None:
- *     0: 12/24 hr mode switch (extended feature)
+ *     0: 12/24 hr mode switch
  *     1: Set clock time
  *     2: Set alarm time
  *     3: Alarm on/off
  *     4: Alarm tone/radio toggle
  *     5: Radio toggle
- *     6:
+ *     6: No function
  *     7: Press for snooze
- * 
- * - Volume output pin is PE3
- * - ADC input pin is PF7
- * - Alarm signal output pin is PD2
- *****************************************************************************************
  *
- ****************************LAB 4 SPECIFICS**********************************************
- * - Temp sensor SCK connected to PD0
- * - Temp sensor SDA connected to PD1
- *****************************************************************************************
+ *
+ * - 7-Segment Display Guide
+ *
+ *        __A__
+ *       |     |
+ *      F|    B|
+ *       |__G__|
+ *       |     |
+ *      E|    C|  H
+ *       |__D__| o
+ *
  */
 
 #define F_CPU 16000000 // cpu speed in hertz 
@@ -156,6 +157,7 @@ volatile uint8_t local_wr_cnt = 0;
 volatile uint8_t rem_wr_cnt = 0;
 volatile uint8_t local_lm73_ready = FALSE;
 
+/* UART variables */
 volatile char read_uart_string[3];
 volatile uint8_t uart_ready = FALSE;
 
@@ -657,7 +659,6 @@ void read_buttons()
 void read_lm73()
 {
 	twi_start_rd(LM73_ADDRESS, lm73_rd_buf, 2);
-	//_delay_ms(2);
 
 	/* Copy high byte in */
 	lm73_temp = lm73_rd_buf[0];
@@ -1114,8 +1115,9 @@ int main()
 		if (radio_state_change == TRUE) {
 			radio_state_change = FALSE;
 			if (radio_on == TRUE) {
-				_delay_ms(1);
 				fm_pwr_up();
+				_delay_ms(1);
+				fm_tune_freq();
 				_delay_ms(1);
 				fm_tune_freq();
 				_delay_ms(1);
@@ -1158,6 +1160,5 @@ int main()
 		} else {
 			continue;
 		}
-
 	}
 }
