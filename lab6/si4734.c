@@ -15,7 +15,7 @@
 
 uint8_t si4734_wr_buf[9];          //buffer for holding data to send to the si4734 
 uint8_t si4734_rd_buf[15];         //buffer for holding data recieved from the si4734
-uint8_t si4734_tune_status_buf[8]; //buffer for holding tune_status data  
+extern uint8_t si4734_tune_status_buf[8]; //buffer for holding tune_status data  
 
 enum radio_band{FM, AM, SW};
 volatile enum radio_band current_radio_band;

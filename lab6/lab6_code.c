@@ -96,7 +96,7 @@
 volatile uint16_t number;
 
 /* Global variable to hold number of seconds elapsed in the day */
-volatile uint32_t seconds = 0;
+volatile uint32_t seconds = 45;
 
 /* Global variable to hold alarm time in seconds */
 volatile uint32_t alarm_time = 0;
@@ -110,22 +110,29 @@ volatile uint8_t freq_countdown = FALSE;
 volatile uint8_t freq_cnt = 0;
 volatile uint8_t write_freq = TRUE;
 volatile uint8_t radio_on = FALSE;
-volatile uint8_t radio_state_change = FALSE;
+volatile uint8_t radio_was_on = FALSE;
+volatile uint8_t radio_state_change = TRUE; //set this false before main loop
+volatile uint8_t signal_strength;
+volatile uint8_t update_sig_str = FALSE;
 
-uint16_t current_fm_freq = 8870; //externed variable from si4734.c
+uint16_t current_fm_freq = 10470; //externed variable from si4734.c
 uint16_t current_am_freq;            //externed variable from si4734.c
 uint16_t current_sw_freq;            //externed variable from si4734.c
 uint8_t  current_volume;             //externed variable from si4734.c
+uint8_t si4734_tune_status_buf[8];   //externed variable from si4734.c
 
 /* Global variable to hold current state of alarm */
 volatile uint8_t alarm_on = FALSE;
 volatile uint8_t alarm_state_changed = TRUE;
 volatile uint8_t alarm_going = FALSE;
 volatile uint8_t alarm_toggle = 0;
+volatile uint8_t alarm_mode = 0;
+volatile uint8_t radio_alarm_on = FALSE;
 volatile uint8_t snooze_state = FALSE;
 volatile uint8_t snoozes = 0;
-volatile char *alarm_on_str  = "ALARM ON        ";
-volatile char *alarm_off_str = "ALARM OFF       ";
+volatile char *alarm_on_str    = "ALARM ON        ";
+volatile char *alarm_radio_str = "ALARM RADIO     ";
+volatile char *alarm_off_str   = "ALARM OFF       ";
 volatile uint8_t str_wr_cnt = 0;
 
 /* Variables for adc stuff */
@@ -399,9 +406,15 @@ void button_mode_toggle(uint8_t button)
 			alarm_going = FALSE; //turn alarm off
 			alarm_time -= (snoozes * SNOOZE_TIME); //remove added snooze time
 			snoozes = 0; //reset snooze count for next time
+			if (radio_was_on == TRUE) {
+				radio_on = TRUE;
+				radio_state_change = TRUE;
+			}
 		}
 	} else if (button == 4) {
-		//toggle signal/radio alarm mode
+		pushbutton_mode ^= 0x10;
+		alarm_mode ^= 1;
+		alarm_state_changed = TRUE;
 	} else if (button == 5) {
 		pushbutton_mode ^= 0x20;
 		radio_on ^= 1;
@@ -412,6 +425,10 @@ void button_mode_toggle(uint8_t button)
 			snooze_state = TRUE; //in snooze
 			alarm_time = (alarm_time + SNOOZE_TIME) % SECONDS_MAX; //10 second snooze
 			snoozes++; //increment snooze counter
+			if (radio_was_on == TRUE) {
+				radio_on = TRUE;
+				radio_state_change = TRUE;
+			}
 		}
 	}
 }
@@ -424,10 +441,10 @@ void button_mode_toggle(uint8_t button)
  * Arguments:		None
  * Return:		None
  ****************************************************************************************/
-void clock_bargraph()
+void clock_bargraph(uint8_t data)
 {
 	/* Sets leds on bar graph display */
-	SPDR = pushbutton_mode; //sets value of SPI data register to mode value
+	SPDR = data; //sets value of SPI data register to mode value
 	while(bit_is_clear(SPSR, SPIF)); //waits for serial transmission to complete
 	PORTB |= 0x70;
 	PORTB &= 0xEF; //toggle bar graph regclk
@@ -799,13 +816,24 @@ void check_encoders()
 void write_lcd()
 {
 	/* Handles line 1 (alarm state) */
-	if ((alarm_state_changed == TRUE) && (alarm_on == TRUE)) {
+	if ((alarm_state_changed == TRUE) && (alarm_mode == 0) && (alarm_on == TRUE)) {
 		if (str_wr_cnt == 0) 
 			cursor_home();
 
 		/* Write a character of the 16 char string at a time */
 		if (alarm_on_str[str_wr_cnt] != '\0') {
 			char2lcd(alarm_on_str[str_wr_cnt++]);
+		} else { //write finished, reset character counter
+			str_wr_cnt = 0;
+			alarm_state_changed = FALSE;
+		}
+	} else if ((alarm_state_changed == TRUE) && (alarm_mode == 1) && (alarm_on == TRUE)) {
+		if (str_wr_cnt == 0) 
+			cursor_home();
+
+		/* Write a character of the 16 char string at a time */
+		if (alarm_radio_str[str_wr_cnt] != '\0') {
+			char2lcd(alarm_radio_str[str_wr_cnt++]);
 		} else { //write finished, reset character counter
 			str_wr_cnt = 0;
 			alarm_state_changed = FALSE;
@@ -883,19 +911,30 @@ ISR(TIMER0_OVF_vect)
 
 	INT0_count++;
 	if (INT0_count == 128) { //every 128 interrupts...
-		seconds++; //a seconds has passed
+		seconds++; //a second has passed
 
 		/* Handle alarm as need be */
 		if ((seconds == alarm_time) && (alarm_on == TRUE)) {
 			alarm_going = TRUE;
 			snooze_state = FALSE;
+			if (radio_on == TRUE) {
+				radio_was_on = TRUE;
+				radio_state_change = TRUE;
+				radio_on = FALSE;
+			}
 		}
 
 		/* Make alarm beep on and off while going */
-		if ((alarm_on == TRUE) && (alarm_going == TRUE))
+		if ((alarm_on == TRUE) && (alarm_going == TRUE) && (alarm_mode == 0))
 			DDRD ^= 0x04;
 		else
 			DDRD &= ~(0x04);
+
+		/* Turn on radio alarm */
+		if ((alarm_on == TRUE) && (alarm_going == TRUE) && (alarm_mode == 1))
+			radio_alarm_on = TRUE;
+		else
+			radio_alarm_on = FALSE;
 
 		/* Reset seconds at max time */
 		if (seconds == SECONDS_MAX)
@@ -926,6 +965,8 @@ ISR(TIMER0_OVF_vect)
 	if ((INT0_count % 32) == 0) {
 		if (uart_or_twi == 0) {
 			local_lm73_ready = TRUE;
+			if (radio_on == TRUE)
+				update_sig_str = TRUE;
 			uart_or_twi ^= 1;
 		} else {
 			uart_ready = TRUE;
@@ -1001,7 +1042,10 @@ ISR(TIMER3_COMPA_vect)
 
 	/* Clock bargraph and modify volume slow */
 	if (INT3_count == 512) {
-		clock_bargraph();
+		if (radio_on == TRUE)
+			clock_bargraph(signal_strength);
+		else
+			clock_bargraph(pushbutton_mode);
 		OCR3AL = audio_volume;
 		INT3_count = 0;
 	}
@@ -1025,6 +1069,8 @@ ISR(INT7_vect) {}
  ****************************************************************************************/
 int main()
 {
+	uint8_t lp_cnt;
+
 	number = 0; //initialize number
 
 	/* enable interrupts */
@@ -1043,6 +1089,7 @@ int main()
 	TCNT2_init(); 
 	TCNT3_init(); 
 	radio_init(); 
+	radio_state_change = FALSE;
 
 	while (1) {
 		display_digits();
@@ -1050,15 +1097,34 @@ int main()
 		PORTA = 0xFF;
 
 		/* Turn radio on/off */
-		if (radio_state_change == TRUE) {
+//		if (radio_alarm_on == TRUE) {
+//
+/*		} else */if (radio_state_change == TRUE) {
 			radio_state_change = FALSE;
 			if (radio_on == TRUE) {
+				_delay_ms(1);
 				fm_pwr_up();
-				_delay_us(500);
+				_delay_ms(1);
 				fm_tune_freq();
+				_delay_ms(1);
 			} else {
 				radio_pwr_dwn();
 			}
+		}
+
+		if ((radio_on == TRUE) && (update_sig_str == TRUE)) {
+			update_sig_str = FALSE;
+			fm_tune_status();
+			//_delay_ms(1);
+			signal_strength = si4734_tune_status_buf[4];
+			signal_strength /= 4;
+			signal_strength = (1 << signal_strength-1) - 1;
+
+			/* Flip binary string */
+			for (lp_cnt = 0; lp_cnt < 8; lp_cnt++)
+				if (!(signal_strength & (1 << lp_cnt)))
+					break;
+			signal_strength <<= (8 - lp_cnt);
 		}
 
 		/* Update fm frequency */
