@@ -211,6 +211,16 @@ volatile uint8_t decoder_select[6] = {
 /* Holds debounce states for each button */
 volatile uint16_t state[8] = {0,0,0,0,0,0,0,0};
 
+/*****************************************************************************************
+ * Function:		set_DUT_state
+ * Description:		Sets device state for QDPPA expo demo
+ * Arguments:		Integer 8 bit state value
+ * Return:		None
+ ****************************************************************************************/
+void set_DUT_state(int state)
+{
+	PORTC = state;
+}
 
 /*****************************************************************************************
  * Function:		TCNT0_init
@@ -370,6 +380,9 @@ void port_init()
 
 	/* Initialize radio reset pin */
 	DDRE |= 0x04;
+
+	/* Initialize DUT state */
+	set_DUT_state(0);
 }
 
 /*****************************************************************************************
@@ -1116,13 +1129,22 @@ int main()
 			radio_state_change = FALSE;
 			if (radio_on == TRUE) {
 				fm_pwr_up();
+
+				/* change DUT power state */
+				set_DUT_state(255);
+
 				_delay_ms(1);
 				fm_tune_freq();
 				_delay_ms(1);
 				fm_tune_freq();
 				_delay_ms(1);
+
 			} else {
 				radio_pwr_dwn();
+
+				/* change DUT power state */
+				set_DUT_state(0);
+
 			}
 		}
 
